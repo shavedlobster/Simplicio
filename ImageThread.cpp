@@ -72,6 +72,19 @@ namespace forms2{
 		int rows = imageData->getRows()*imageData->getDoubler();//min((img->getRows())*(img->getDoubler()),pictureBox->Height);
 		int previewWidth = ((cols+binSize-1)/binSize)*pixelSize;
 		int previewHeight = ((rows+binSize-1)/binSize)*pixelSize;
+		int panelWidth = Math::Max((int)buffers[0]->Graphics->VisibleClipBounds.Width,1);
+		int panelHeight = Math::Max((int)buffers[0]->Graphics->VisibleClipBounds.Height,1);
+		int maxInfoLines = 2;
+		if (makePreview)
+			maxInfoLines = Math::Max(maxInfoLines,2+imageData->getSeqVars()->Count);
+		int infoLineHeight = 20;
+		int infoHeight = maxInfoLines*infoLineHeight;
+		int imageAreaHeight = Math::Max(panelHeight-infoHeight,1);
+		double fitScale = Math::Min((double)panelWidth/previewWidth,(double)imageAreaHeight/previewHeight);
+		int fittedWidth = Math::Max((int)Math::Floor(previewWidth*fitScale),1);
+		int fittedHeight = Math::Max((int)Math::Floor(previewHeight*fitScale),1);
+		int fittedX = (panelWidth-fittedWidth)/2;
+		int fittedY = (panelHeight-fittedHeight-infoHeight)/2;
 		
 		//create bitmaps, lock bits
 		Rectangle rect = Rectangle(0,0,previewWidth,previewHeight);
@@ -188,16 +201,17 @@ namespace forms2{
 		for (int i=0;i<numBuffers;i++){
 			System::Runtime::InteropServices::Marshal::Copy( bmpValues[i], 0, bmpData[i]->Scan0, bytes );
 			bitmaps[i]->UnlockBits(bmpData[i]);
-			buffers[i]->Graphics->DrawImage(bitmaps[i],0,0);
+			buffers[i]->Graphics->FillRectangle(Brushes::Black,Rectangle(0,0,panelWidth,panelHeight));
+			buffers[i]->Graphics->DrawImage(bitmaps[i],Rectangle(fittedX,fittedY,fittedWidth,fittedHeight));
 		}
 
 		//draw time, max value, and list-driven variables on each image:
 		System::Drawing::Font^ font = gcnew System::Drawing::Font("Arial",12);
 		LinkedList<String^>^ strList = gcnew LinkedList<String^>();//holds the strings to draw
 		//define white box behind text
-		int bw(200),bh(20);
-		x = previewWidth-bw;
-		y = previewHeight;
+		int bw(Math::Min(260,panelWidth)),bh(infoLineHeight);
+		x = Math::Max(0,Math::Min(fittedX+fittedWidth-bw,panelWidth-bw));
+		y = fittedY+fittedHeight;
 		//loop over buffers and draw text
 		brush->Color = Color::White;
 		for (int bufLay(0); bufLay<numBuffers;bufLay++){
@@ -216,7 +230,7 @@ namespace forms2{
 			buffers[bufLay]->Graphics->FillRectangle(brush,Rectangle(x,y,bw,bh*strList->Count));
 			int strInd(0);
 			for each(String^ str in strList){
-				buffers[bufLay]->Graphics->DrawString(str,font,Brushes::Black, Point(x+15,y+bh*strInd) );
+				buffers[bufLay]->Graphics->DrawString(str,font,Brushes::Black, Point(x+5,y+bh*strInd) );
 				strInd++;
 			}
 			strList->Clear();

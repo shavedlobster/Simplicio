@@ -252,3 +252,57 @@ These changes were developed and physically validated in the local `vs2026` Visu
 - User-reported physical-camera validation passed: the settings dialog opens, settings apply, and image acquisition continues to work with the Pixelfly.
 - A physical-camera rapid-click test remains to be run after rebuilding the normal Debug x64 output.
 - Prepared for a fork-only commit to `shavedlobster/Simplicio`; no change was made to `atsommer/Simplicio`.
+
+## 2026-09-07 — Correct Pixelfly Centered-Region Selection
+
+These changes are local to the `vs2026` Visual Studio checkout pending physical-camera validation and a later fork-only push.
+
+### Finding
+
+- Physical testing showed that arbitrary coordinates entered through `PCO_SetROI` returned to the camera's prior values when acquisition armed the camera.
+- The pco.pixelfly 1.4 USB provides its documented `800 x 600` centered region as the PCO extended sensor format. Its standard sensor format is the full `1392 x 1040` area.
+- Binning changes the number of output pixels but should preserve the field selected by the sensor format. Simplicio scales every captured array to its preview box, so output size alone did not identify the physical field being captured.
+
+### Changed
+
+- `PixelflyUsbDriver.cpp`, `openCameraDialog`
+  - Replaced the four editable generic ROI-coordinate controls with a `Captured sensor area` selector.
+  - Offers the camera-reported standard full-sensor format and, when available, the extended centered format.
+  - Applies the selection using `PCO_SetSensorFormat` before applying binning and arming the camera.
+  - Continues to display the ROI returned by the camera as read-only diagnostic information.
+  - Rereads sensor format, ROI, binning, and output dimensions after arming.
+  - Shows a confirmation containing the area, accepted binning, output dimensions, and camera-reported ROI.
+  - Clarifies in the dialog that binning changes output resolution rather than the selected field of view.
+
+### Validation pending
+
+- Compiled `PixelflyUsbDriver.cpp` successfully as x64 C++/CLI against the installed PCO SDK and .NET Framework assemblies.
+- A complete command-line MSBuild could not run in the Codex sandbox because Visual C++ `FileTracker` received an access-denied error before project compilation; build the complete solution in the already-open Visual Studio instance.
+- Rebuild Debug x64 and confirm that `Centered region (800 x 600)` remains selected after an acquisition.
+- At `1 x 1` binning, confirm centered output is `800 x 600`; at `2 x 2`, expect `400 x 300` while retaining the same centered field.
+
+## 2026-09-07 — Fit and Center Image Previews
+
+These changes are local to the `vs2026` Visual Studio checkout pending visual validation and a later fork-only push.
+
+### Finding
+
+- Simplicio created a preview bitmap from every captured pixel but drew it at display coordinate `(0, 0)` without scaling it to the black preview panel.
+- Small previews therefore remained attached to the upper-left corner, while previews larger than the panel could be clipped.
+- The placement affected only the screen preview. It did not discard or alter pixels stored in `ImageData` or AIA files.
+
+### Changed
+
+- `ImageThread.cpp`, `renderImage`
+  - Calculates a uniform fit scale from the captured image and the available preview-panel dimensions.
+  - Preserves the captured image's aspect ratio.
+  - Centers the image and its information area horizontally and vertically within the black panel.
+  - Reserves enough vertical space for the timestamp, value information, and any sequence variables.
+  - Clears each preview buffer to black before drawing the fitted image.
+  - Positions the information box against the fitted image rather than its former unscaled coordinates.
+
+### Validation pending
+
+- Compiled the changed `ImageThread.cpp` successfully as x64 C++/CLI against the project's assemblies.
+- Rebuild Debug x64 and compare full `1392 x 1040`, centered `800 x 600`, and binned captures.
+- Confirm each complete frame is visible, centered, and undistorted, and that the timestamp/value box remains within the panel.

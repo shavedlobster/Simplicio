@@ -121,6 +121,7 @@ namespace forms2 {
 		DWORD exposure = 0;
 		WORD delayBase = 0;
 		WORD exposureBase = 0;
+		WORD sensorFormat = SENSORFORMAT_STANDARD;
 		WORD x0 = 1, y0 = 1, x1 = 0, y1 = 0;
 		WORD binH = 1, binV = 1;
 		WORD actualWidth = 0, actualHeight = 0, maxWidth = 0, maxHeight = 0;
@@ -128,6 +129,8 @@ namespace forms2 {
 		lastError = PCO_GetCameraDescription(camera, &description);
 		if (lastError == PCO_NOERROR)
 			lastError = PCO_GetDelayExposureTime(camera, &delay, &exposure, &delayBase, &exposureBase);
+		if (lastError == PCO_NOERROR)
+			lastError = PCO_GetSensorFormat(camera, &sensorFormat);
 		if (lastError == PCO_NOERROR)
 			lastError = PCO_GetROI(camera, &x0, &y0, &x1, &y1);
 		if (lastError == PCO_NOERROR)
@@ -153,15 +156,15 @@ namespace forms2 {
 		dialog->MinimizeBox = false;
 		dialog->MaximizeBox = false;
 		dialog->ShowInTaskbar = false;
-		dialog->ClientSize = System::Drawing::Size(520, 390);
+		dialog->ClientSize = System::Drawing::Size(560, 350);
 
 		TableLayoutPanel^ table = gcnew TableLayoutPanel();
 		table->Dock = DockStyle::Fill;
 		table->Padding = Padding(12);
 		table->ColumnCount = 3;
-		table->RowCount = 10;
+		table->RowCount = 8;
 		table->ColumnStyles->Add(gcnew ColumnStyle(SizeType::Absolute, 145));
-		table->ColumnStyles->Add(gcnew ColumnStyle(SizeType::Absolute, 145));
+		table->ColumnStyles->Add(gcnew ColumnStyle(SizeType::Absolute, 190));
 		table->ColumnStyles->Add(gcnew ColumnStyle(SizeType::Percent, 100));
 
 		NumericUpDown^ exposureBox = gcnew NumericUpDown();
@@ -172,6 +175,17 @@ namespace forms2 {
 		exposureBox->Value = Convert::ToDecimal(Math::Min(Math::Max(exposureMs, minimumExposureMs), maximumExposureMs));
 		exposureBox->Width = 130;
 
+		ComboBox^ sensorFormatBox = gcnew ComboBox();
+		sensorFormatBox->DropDownStyle = ComboBoxStyle::DropDownList;
+		sensorFormatBox->Width = 180;
+		sensorFormatBox->Items->Add(String::Format("Full sensor ({0} x {1})",
+			description.wMaxHorzResStdDESC, description.wMaxVertResStdDESC));
+		bool hasCenteredFormat = description.wMaxHorzResExtDESC > 0 && description.wMaxVertResExtDESC > 0;
+		if (hasCenteredFormat)
+			sensorFormatBox->Items->Add(String::Format("Centered region ({0} x {1})",
+				description.wMaxHorzResExtDESC, description.wMaxVertResExtDESC));
+		sensorFormatBox->SelectedIndex = hasCenteredFormat && sensorFormat == SENSORFORMAT_EXTENDED ? 1 : 0;
+
 		NumericUpDown^ binHBox = gcnew NumericUpDown();
 		binHBox->Minimum = 1;
 		binHBox->Maximum = Math::Max((int)description.wMaxBinHorzDESC, 1);
@@ -181,43 +195,23 @@ namespace forms2 {
 		binVBox->Maximum = Math::Max((int)description.wMaxBinVertDESC, 1);
 		binVBox->Value = binV;
 
-		NumericUpDown^ x0Box = gcnew NumericUpDown();
-		NumericUpDown^ x1Box = gcnew NumericUpDown();
-		NumericUpDown^ y0Box = gcnew NumericUpDown();
-		NumericUpDown^ y1Box = gcnew NumericUpDown();
-		array<NumericUpDown^>^ roiBoxes = gcnew array<NumericUpDown^>(4) { x0Box, x1Box, y0Box, y1Box };
-		for each (NumericUpDown^ box in roiBoxes) {
-			box->Minimum = 1;
-			box->Width = 130;
-		}
-		x0Box->Maximum = Math::Max((int)description.wMaxHorzResStdDESC, 1);
-		x1Box->Maximum = Math::Max((int)description.wMaxHorzResStdDESC, 1);
-		y0Box->Maximum = Math::Max((int)description.wMaxVertResStdDESC, 1);
-		y1Box->Maximum = Math::Max((int)description.wMaxVertResStdDESC, 1);
-		x0Box->Increment = Math::Max((int)description.wRoiHorStepsDESC, 1);
-		x1Box->Increment = Math::Max((int)description.wRoiHorStepsDESC, 1);
-		y0Box->Increment = Math::Max((int)description.wRoiVertStepsDESC, 1);
-		y1Box->Increment = Math::Max((int)description.wRoiVertStepsDESC, 1);
-		x0Box->Value = x0; x1Box->Value = x1;
-		y0Box->Value = y0; y1Box->Value = y1;
-
 		addSettingsRow(table, 0, "Exposure", exposureBox, "ms");
-		addSettingsRow(table, 1, "Horizontal binning", binHBox,
+		addSettingsRow(table, 1, "Captured sensor area", sensorFormatBox,
+			"Binning changes output resolution, not this field of view");
+		addSettingsRow(table, 2, "Horizontal binning", binHBox,
 			description.wBinHorzSteppingDESC == 0 ? "powers of two" : "linear values");
-		addSettingsRow(table, 2, "Vertical binning", binVBox,
+		addSettingsRow(table, 3, "Vertical binning", binVBox,
 			description.wBinVertSteppingDESC == 0 ? "powers of two" : "linear values");
-		addSettingsRow(table, 3, "ROI X start", x0Box, String::Format("step {0}", Math::Max((int)description.wRoiHorStepsDESC, 1)));
-		addSettingsRow(table, 4, "ROI X end", x1Box, String::Format("minimum width {0}", description.wMinSizeHorzDESC));
-		addSettingsRow(table, 5, "ROI Y start", y0Box, String::Format("step {0}", Math::Max((int)description.wRoiVertStepsDESC, 1)));
-		addSettingsRow(table, 6, "ROI Y end", y1Box, String::Format("minimum height {0}", description.wMinSizeVertDESC));
-		addSettingsRow(table, 7, "Current image size", gcnew Label(), String::Format("{0} x {1} pixels", actualWidth, actualHeight));
-		addSettingsRow(table, 8, "Dynamic resolution", gcnew Label(), String::Format("{0} bit", description.wDynResDESC));
+		addSettingsRow(table, 4, "Camera-reported ROI", gcnew Label(),
+			String::Format("({0}, {1}) through ({2}, {3})", x0, y0, x1, y1));
+		addSettingsRow(table, 5, "Current output size", gcnew Label(), String::Format("{0} x {1} pixels", actualWidth, actualHeight));
+		addSettingsRow(table, 6, "Dynamic resolution", gcnew Label(), String::Format("{0} bit", description.wDynResDESC));
 
 		Label^ instruction = gcnew Label();
-		instruction->Text = "Apply writes these values through the PCO SDK. The camera remains in software-trigger mode for Simplicio acquisition.";
+		instruction->Text = "Apply selects the Pixelfly sensor format, then binning. The accepted area and output size are confirmed after the camera is armed.";
 		instruction->AutoSize = true;
 		instruction->MaximumSize = System::Drawing::Size(470, 0);
-		table->Controls->Add(instruction, 0, 9);
+		table->Controls->Add(instruction, 0, 7);
 		table->SetColumnSpan(instruction, 3);
 
 		FlowLayoutPanel^ buttons = gcnew FlowLayoutPanel();
@@ -245,20 +239,17 @@ namespace forms2 {
 		WORD newBinV = Decimal::ToUInt16(binVBox->Value);
 		bool validBinH = description.wBinHorzSteppingDESC != 0 || (newBinH & (newBinH - 1)) == 0;
 		bool validBinV = description.wBinVertSteppingDESC != 0 || (newBinV & (newBinV - 1)) == 0;
-		WORD newX0 = Decimal::ToUInt16(x0Box->Value);
-		WORD newX1 = Decimal::ToUInt16(x1Box->Value);
-		WORD newY0 = Decimal::ToUInt16(y0Box->Value);
-		WORD newY1 = Decimal::ToUInt16(y1Box->Value);
-		int roiWidth = newX1 - newX0 + 1;
-		int roiHeight = newY1 - newY0 + 1;
-		if (!validBinH || !validBinV || newX1 < newX0 || newY1 < newY0 ||
-			roiWidth < description.wMinSizeHorzDESC || roiHeight < description.wMinSizeVertDESC) {
-			MessageBox::Show("The selected binning or ROI is outside the limits reported by the camera.",
+		WORD newSensorFormat = sensorFormatBox->SelectedIndex == 1 ? SENSORFORMAT_EXTENDED : SENSORFORMAT_STANDARD;
+		if (!validBinH || !validBinV) {
+			MessageBox::Show("The selected binning is outside the limits reported by the camera.",
 				"pco.pixelfly 1.4 USB", MessageBoxButtons::OK, MessageBoxIcon::Warning);
 			return INIT_ERROR;
 		}
 
 		double newExposureMs = Decimal::ToDouble(exposureBox->Value);
+		WORD originalSensorFormat = sensorFormat;
+		WORD originalBinH = binH;
+		WORD originalBinV = binV;
 		WORD newExposureBase;
 		DWORD newExposure;
 		if (newExposureMs * 1000000.0 <= UInt32::MaxValue) {
@@ -278,18 +269,24 @@ namespace forms2 {
 		releaseBuffer();
 		lastError = PCO_SetDelayExposureTime(camera, delay, newExposure, delayBase, newExposureBase);
 		if (lastError == PCO_NOERROR)
-			lastError = PCO_SetROI(camera, newX0, newY0, newX1, newY1);
+			lastError = PCO_SetSensorFormat(camera, newSensorFormat);
 		if (lastError == PCO_NOERROR)
 			lastError = PCO_SetBinning(camera, newBinH, newBinV);
 		if (lastError == PCO_NOERROR)
 			lastError = PCO_ArmCamera(camera);
 		if (lastError == PCO_NOERROR)
 			lastError = PCO_GetSizes(camera, &actualWidth, &actualHeight, &maxWidth, &maxHeight);
+		if (lastError == PCO_NOERROR)
+			lastError = PCO_GetROI(camera, &x0, &y0, &x1, &y1);
+		if (lastError == PCO_NOERROR)
+			lastError = PCO_GetBinning(camera, &binH, &binV);
+		if (lastError == PCO_NOERROR)
+			lastError = PCO_GetSensorFormat(camera, &sensorFormat);
 
 		if (lastError != PCO_NOERROR) {
 			int applyError = lastError;
-			PCO_SetBinning(camera, binH, binV);
-			PCO_SetROI(camera, x0, y0, x1, y1);
+			PCO_SetSensorFormat(camera, originalSensorFormat);
+			PCO_SetBinning(camera, originalBinH, originalBinV);
 			PCO_SetDelayExposureTime(camera, delay, exposure, delayBase, exposureBase);
 			PCO_ArmCamera(camera);
 			getSettings();
@@ -301,6 +298,13 @@ namespace forms2 {
 		imageHeight = actualHeight;
 		bitResolution = description.wDynResDESC;
 		getSettings();
+		String^ acceptedArea = sensorFormat == SENSORFORMAT_EXTENDED ?
+			String::Format("Centered region ({0} x {1})", description.wMaxHorzResExtDESC, description.wMaxVertResExtDESC) :
+			String::Format("Full sensor ({0} x {1})", description.wMaxHorzResStdDESC, description.wMaxVertResStdDESC);
+		MessageBox::Show(
+			String::Format("Camera accepted:\r\n\r\nArea: {0}\r\nBinning: {1} x {2}\r\nOutput: {3} x {4} pixels\r\nCamera ROI: ({5}, {6}) through ({7}, {8})",
+				acceptedArea, binH, binV, actualWidth, actualHeight, x0, y0, x1, y1),
+			"pco.pixelfly 1.4 USB", MessageBoxButtons::OK, MessageBoxIcon::Information);
 		return 0;
 	}
 
