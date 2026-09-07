@@ -2,6 +2,7 @@
 #include "ImageData.h"
 
 namespace forms2{
+	using namespace System::Windows::Forms;
 
 	void ImageData::init(UInt16* b, int r, int c, int l, bool d, bool sf, DateTime datetime){
 		//copies b to imageBuffer
@@ -54,61 +55,64 @@ namespace forms2{
 	}
 	void ImageData::saveFile(String^ filePath)
 	{	//saves a 16-bit AIA file in little endian
-		
-		String^ extension =".aia";
-		String^ basename = String::Format("{0}\\{1}",filePath,getDateTimeString());
-		String^ filename = String::Copy(basename);
-		
-		//prevent overwrite by renaming
-		for (int i=0; (i<1000) && File::Exists(String::Concat(filename,extension));i++){
-			filename =String::Format("{0} Copy {1}",basename,i);
-		}
-		filename = String::Concat(filename,extension);
-		//if (File::Exists(filename)) return;
-
-		FileStream^ fs = File::Open(filename,FileMode::Create);
-		BinaryWriter^ bw = gcnew BinaryWriter(fs);
+		saved=false;
 		try{
-			Byte b0 = 0x41;
-			Byte b1 = 0x49;
-			Byte b2 = 0x41;
-			bw->Write(b0);
-			bw->Write(b1);
-			bw->Write(b2);
-			UInt16 intLength = 2;
-			bw->Write(intLength);
-			int rows2 = (getRows())*(getDoubler());
-			//int cols = getCols();
-			//int layers = getLayers();
-			bw->Write((UInt16)rows2);
-			bw->Write((UInt16)cols);
-			int templayers=layers;
-			if (singleFrame)
-				templayers=3;
-			bw->Write((UInt16)templayers);	
-			
-			//write data
-			//for (int i=0;i<rows2*cols*layers;i++)
-			//	bw->Write(getValue(i));
-			
-			for (int l(0); l<layers; l++)
-				if (!(singleFrame && (l==0 || l > 3)))
-					for (int r(0);r<rows2;r++)
-						for (int c(0);c<cols;c++)
-							bw->Write(getValue(r,c,l,0));
-						
+			if (String::IsNullOrWhiteSpace(filePath) || !Directory::Exists(filePath))
+				throw gcnew DirectoryNotFoundException(String::Format("The save folder does not exist: {0}",filePath));
 
-			//save sequence variables:
-			for each(Variable^ var in seqVars){
-				bw->Write(var->VariableName->ToCharArray());
-				bw->Write((Byte)0);
-				bw->Write((Double)var->VariableValue);
+			String^ extension =".aia";
+			String^ basename = Path::Combine(filePath,getDateTimeString());
+			String^ filename = String::Copy(basename);
+			
+			//prevent overwrite by renaming
+			for (int i=0; (i<1000) && File::Exists(String::Concat(filename,extension));i++){
+				filename =String::Format("{0} Copy {1}",basename,i);
 			}
-			saved=true;
+			filename = String::Concat(filename,extension);
+
+			FileStream^ fs = nullptr;
+			BinaryWriter^ bw = nullptr;
+			try{
+				fs = File::Open(filename,FileMode::Create);
+				bw = gcnew BinaryWriter(fs);
+				bw->Write((Byte)0x41);
+				bw->Write((Byte)0x49);
+				bw->Write((Byte)0x41);
+				UInt16 intLength = 2;
+				bw->Write(intLength);
+				int rows2 = (getRows())*(getDoubler());
+				bw->Write((UInt16)rows2);
+				bw->Write((UInt16)cols);
+				int templayers=layers;
+				if (singleFrame)
+					templayers=3;
+				bw->Write((UInt16)templayers);
+
+				for (int l(0); l<layers; l++)
+					if (!(singleFrame && (l==0 || l > 3)))
+						for (int r(0);r<rows2;r++)
+							for (int c(0);c<cols;c++)
+								bw->Write(getValue(r,c,l,0));
+
+				//save sequence variables:
+				for each(Variable^ var in seqVars){
+					bw->Write(var->VariableName->ToCharArray());
+					bw->Write((Byte)0);
+					bw->Write((Double)var->VariableValue);
+				}
+				saved=true;
+			}
+			finally{
+				if (bw!=nullptr)
+					bw->Close();
+				else if (fs!=nullptr)
+					fs->Close();
+			}
 		}
-		finally{
-			bw->Close();
-			fs->Close();
+		catch(Exception^ ex){
+			MessageBox::Show(
+				String::Format("The image was not saved.\r\n\r\n{0}\r\n\r\nClick the Save to path and choose an existing folder.",ex->Message),
+				"Save Image Data",MessageBoxButtons::OK,MessageBoxIcon::Error);
 		}
 	}
 	void ImageData::setSeqVars(LinkedList<Variable^>^ vars){

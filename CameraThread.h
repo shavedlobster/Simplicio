@@ -56,7 +56,7 @@ namespace forms2{
 		String^ interruptLock;
 		
 		bool singleFrame;
-		bool running;
+		int running;
 		bool cameraInited;
 		bool save;
 		CameraSettings* camSet;

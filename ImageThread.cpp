@@ -17,29 +17,47 @@ namespace forms2{
 		buffers = nullptr;
 		saveFile=true;
 		singleFrame = f->isSingleFrame();
+		processSingleFrame = singleFrame;
 		addBuffersMainForm = gcnew DelegateBuffersIntImg(f,&Form1::addBuffers);
 	}
 	bool ImageThread::processImage(ImageData^ img, bool savefile,int binsize,int pixelsize){
-		if (processing || img==nullptr) return true;
+		if (img==nullptr || Interlocked::CompareExchange(processing,1,0)!=0) return true;
 		imageData = img;
 		saveFile = savefile;
-		binSize=binsize;
-		pixelSize=pixelsize;
-		Thread^ imageThread = gcnew Thread(gcnew ThreadStart(this,&ImageThread::processNewImage));
-		imageThread->Start();
+		binSize=Math::Max(binsize,1);
+		pixelSize=Math::Max(pixelsize,1);
+		processSingleFrame=singleFrame;
+		try{
+			Thread^ imageThread = gcnew Thread(gcnew ThreadStart(this,&ImageThread::processNewImage));
+			imageThread->Start();
+		}
+		catch(Exception^){
+			Interlocked::Exchange(processing,0);
+			throw;
+		}
 		return false;
 	}
 	int max(int x,int y){return x>y?x:y;}
 	int min(int x,int y){return x<y?x:y;}
 	void ImageThread::processNewImage(){
+		try{
+			renderImage();
+		}
+		catch(Exception^ ex){
+			MessageBox::Show(String::Format("Image preview failed: {0}",ex->Message),"Image Preview",MessageBoxButtons::OK,MessageBoxIcon::Error);
+		}
+		finally{
+			Interlocked::Exchange(processing,0);
+		}
+	}
+	void ImageThread::renderImage(){
 		//creates new buffers and calculates values
 		//report to Form1: buffers, numBuffers, [imageData--or write calculations to buffers]
 		if (imageData==nullptr) return;
-		processing = true;
 		
 		//allocate new buffers
 		int layers = imageData->getLayers();
-		bool makePreview=(layers==3 || singleFrame);
+		bool makePreview=(layers==3 || (processSingleFrame && layers>=4));
 		numBuffers = layers;
 		if (makePreview)
 			numBuffers++;//create an extra buffer
@@ -52,20 +70,22 @@ namespace forms2{
 		//get image size
 		int cols = imageData->getCols();//min(img->getCols(),pictureBox->Width);
 		int rows = imageData->getRows()*imageData->getDoubler();//min((img->getRows())*(img->getDoubler()),pictureBox->Height);
+		int previewWidth = ((cols+binSize-1)/binSize)*pixelSize;
+		int previewHeight = ((rows+binSize-1)/binSize)*pixelSize;
 		
 		//create bitmaps, lock bits
-		Rectangle rect = Rectangle(0,0,cols,rows);
+		Rectangle rect = Rectangle(0,0,previewWidth,previewHeight);
 		array<Bitmap^>^ bitmaps = gcnew array<Bitmap^>(numBuffers);
 		array<BitmapData^>^ bmpData = gcnew array<BitmapData^>(numBuffers);
 		for(int i(0);i<numBuffers;i++){
-			bitmaps[i]=gcnew Bitmap(cols,rows,PixelFormat::Format32bppArgb);
+			bitmaps[i]=gcnew Bitmap(previewWidth,previewHeight,PixelFormat::Format32bppArgb);
 			bmpData[i] = bitmaps[i]->LockBits(rect,Imaging::ImageLockMode::ReadWrite,bitmaps[i]->PixelFormat);
 		}
 
 		//create value arrays
 		int bytesPerPixel = 4;  
 		int stride=bmpData[0]->Stride;//bytes per row
-		int bytes = stride * rows;//bytes per layer
+		int bytes = stride * previewHeight;//bytes per layer
 		array<array<Byte>^>^ bmpValues = gcnew array<array<Byte>^>(numBuffers);
 		for (int i=0;i<numBuffers;i++){
 			bmpValues[i] = gcnew array<Byte>(bytes);
@@ -99,15 +119,17 @@ namespace forms2{
 					bufLay = lay;
 					//if (layers==3 || singleFrame) bufLay++;//make space for preview layer
 					if (makePreview) bufLay++;//make space for preview layer
-					x = pixelSize*c/binSize;
-					y = pixelSize*r/binSize;
-					for (int rgb=0;rgb<4;rgb++)
-						bmpValues[bufLay][y*stride+bytesPerPixel*x+rgb] = (rgb==3)? 255:value;
+					x = (c/binSize)*pixelSize;
+					y = (r/binSize)*pixelSize;
+					for (int py=0;py<pixelSize;py++)
+						for (int px=0;px<pixelSize;px++)
+							for (int rgb=0;rgb<4;rgb++)
+								bmpValues[bufLay][(y+py)*stride+bytesPerPixel*(x+px)+rgb] = (rgb==3)? 255:value;
 					//bitmaps[bufLay]->SetPixel(pixelSize*c/binSize,pixelSize*r/binSize,Color::FromArgb(value,value,value));
 					//buffers[bufLay]->Graphics->FillRectangle(brush,Rectangle(pixelSize*c/binSize,pixelSize*r/binSize,pixelSize,pixelSize));
 				}
 				
-				if (singleFrame)//define preview layer for single frame kinetics imaging
+				if (processSingleFrame && layers>=4)//define preview layer for single frame kinetics imaging
 				{
 					PWA=counts[1];
 					PWOA=counts[2];
@@ -135,10 +157,12 @@ namespace forms2{
 							ratio = (2<<16) - 1;
 						ratio = ratio>>9;//bring ratio into the range [0,255]
 						value = (int)ratio;
-						x = pixelSize*c/binSize;
-						y = pixelSize*r/binSize;
-						for (int rgb=0;rgb<4;rgb++)
-							bmpValues[0][y*stride+bytesPerPixel*x+rgb] =(rgb==3)? 255:value;
+						x = (c/binSize)*pixelSize;
+						y = (r/binSize)*pixelSize;
+						for (int py=0;py<pixelSize;py++)
+							for (int px=0;px<pixelSize;px++)
+								for (int rgb=0;rgb<4;rgb++)
+									bmpValues[0][(y+py)*stride+bytesPerPixel*(x+px)+rgb] =(rgb==3)? 255:value;
 						//bitmaps[0]->SetPixel(pixelSize*c/binSize,pixelSize*r/binSize,Color::FromArgb(value,value,value));
 						//brush->Color = Color::FromArgb(value,value,value);
 						//buffers[0]->Graphics->FillRectangle(brush,Rectangle(pixelSize*c/binSize,pixelSize*r/binSize,pixelSize,pixelSize));
@@ -172,8 +196,8 @@ namespace forms2{
 		LinkedList<String^>^ strList = gcnew LinkedList<String^>();//holds the strings to draw
 		//define white box behind text
 		int bw(200),bh(20);
-		x = pixelSize*cols/binSize-bw;
-		y = pixelSize*rows/binSize;
+		x = previewWidth-bw;
+		y = previewHeight;
 		//loop over buffers and draw text
 		brush->Color = Color::White;
 		for (int bufLay(0); bufLay<numBuffers;bufLay++){
@@ -209,7 +233,6 @@ namespace forms2{
 		parameters[1] = numBuffers;
 		parameters[2] = imageData;
 		mainForm->BeginInvoke(addBuffersMainForm, parameters);
-		processing=false;
 	}
 
 }

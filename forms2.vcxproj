@@ -9,6 +9,14 @@
 	  <Configuration>Release</Configuration>
 	  <Platform>Win32</Platform>
 	</ProjectConfiguration>
+	<ProjectConfiguration Include="Debug|x64">
+	  <Configuration>Debug</Configuration>
+	  <Platform>x64</Platform>
+	</ProjectConfiguration>
+	<ProjectConfiguration Include="Release|x64">
+	  <Configuration>Release</Configuration>
+	  <Platform>x64</Platform>
+	</ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
 	<ProjectGuid>{6CDD9249-5F5B-42B6-83EC-A8684D8F3728}</ProjectGuid>
@@ -29,6 +37,19 @@
 	<CLRSupport>true</CLRSupport>
 	<PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+	<ConfigurationType>Application</ConfigurationType>
+	<CharacterSet>Unicode</CharacterSet>
+	<CLRSupport>true</CLRSupport>
+	<PlatformToolset>v145</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+	<ConfigurationType>Application</ConfigurationType>
+	<CharacterSet>Unicode</CharacterSet>
+	<CLRSupport>true</CLRSupport>
+	<WholeProgramOptimization>true</WholeProgramOptimization>
+	<PlatformToolset>v145</PlatformToolset>
+  </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
@@ -38,7 +59,17 @@
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
 	<Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+	<Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+	<Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+	<PcoSdkDir Condition="'$(PCO_SDK_DIR)'!=''">$(PCO_SDK_DIR)</PcoSdkDir>
+	<PcoSdkDir Condition="'$(PcoSdkDir)'==''">C:\Program Files\PCO Digital Camera Toolbox\pco.cpp</PcoSdkDir>
+  </PropertyGroup>
   <PropertyGroup>
 	<_ProjectFileVersion>17.0.31903.59</_ProjectFileVersion>
 	<OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(SolutionDir)$(Configuration)\</OutDir>
@@ -47,11 +78,17 @@
 	<OutDir Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(SolutionDir)$(Configuration)\</OutDir>
 	<IntDir Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(Configuration)\</IntDir>
 	<LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</LinkIncremental>
+	<OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(SolutionDir)x64\$(Configuration)\</OutDir>
+	<IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">x64\$(Configuration)\</IntDir>
+	<LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</LinkIncremental>
+	<OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)x64\$(Configuration)\</OutDir>
+	<IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">x64\$(Configuration)\</IntDir>
+	<LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkIncremental>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
 	<ClCompile>
 	  <Optimization>Disabled</Optimization>
-	  <AdditionalIncludeDirectories>SensiCam SDK;%(_AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+	  <AdditionalIncludeDirectories>$(PcoSdkDir)\include;SensiCam SDK;%(_AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
 	  <PreprocessorDefinitions>WIN32;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
 	  <ExceptionHandling>Async</ExceptionHandling>
 	  <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
@@ -60,8 +97,8 @@
 	  <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
 	</ClCompile>
 	<Link>
-	  <AdditionalDependencies>Senntcam.lib;%(AdditionalDependencies)</AdditionalDependencies>
-	  <AdditionalLibraryDirectories>SensiCam SDK;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+	  <AdditionalDependencies>sc2_cam.lib;Senntcam.lib;%(AdditionalDependencies)</AdditionalDependencies>
+	  <AdditionalLibraryDirectories>$(PcoSdkDir)\lib;SensiCam SDK;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
 	  <GenerateDebugInformation>true</GenerateDebugInformation>
 	  <AssemblyDebug>true</AssemblyDebug>
 	  <SubSystem>Windows</SubSystem>
@@ -69,9 +106,48 @@
 	  <TargetMachine>MachineX86</TargetMachine>
 	</Link>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+	<ClCompile>
+	  <Optimization>Disabled</Optimization>
+	  <AdditionalIncludeDirectories>$(PcoSdkDir)\include;%(_AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+	  <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+	  <ExceptionHandling>Async</ExceptionHandling>
+	  <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+	  <PrecompiledHeader>Use</PrecompiledHeader>
+	  <WarningLevel>Level3</WarningLevel>
+	  <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+	</ClCompile>
+	<Link>
+	  <AdditionalDependencies>sc2_cam.lib;%(AdditionalDependencies)</AdditionalDependencies>
+	  <AdditionalLibraryDirectories>$(PcoSdkDir)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+	  <GenerateDebugInformation>true</GenerateDebugInformation>
+	  <AssemblyDebug>true</AssemblyDebug>
+	  <SubSystem>Windows</SubSystem>
+	  <EntryPointSymbol>main</EntryPointSymbol>
+	  <TargetMachine>MachineX64</TargetMachine>
+	</Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+	<ClCompile>
+	  <AdditionalIncludeDirectories>$(PcoSdkDir)\include;%(_AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+	  <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+	  <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+	  <PrecompiledHeader>Use</PrecompiledHeader>
+	  <WarningLevel>Level3</WarningLevel>
+	  <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+	</ClCompile>
+	<Link>
+	  <AdditionalDependencies>sc2_cam.lib;%(AdditionalDependencies)</AdditionalDependencies>
+	  <AdditionalLibraryDirectories>$(PcoSdkDir)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+	  <GenerateDebugInformation>true</GenerateDebugInformation>
+	  <SubSystem>Windows</SubSystem>
+	  <EntryPointSymbol>main</EntryPointSymbol>
+	  <TargetMachine>MachineX64</TargetMachine>
+	</Link>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
 	<ClCompile>
-	  <AdditionalIncludeDirectories>SensiCam SDK;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+	  <AdditionalIncludeDirectories>$(PcoSdkDir)\include;SensiCam SDK;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
 	  <PreprocessorDefinitions>WIN32;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
 	  <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
 	  <PrecompiledHeader>Use</PrecompiledHeader>
@@ -79,8 +155,8 @@
 	  <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
 	</ClCompile>
 	<Link>
-	  <AdditionalDependencies>Senntcam.lib;%(AdditionalDependencies)</AdditionalDependencies>
-	  <AdditionalLibraryDirectories>SensiCam SDK;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+	  <AdditionalDependencies>sc2_cam.lib;Senntcam.lib;%(AdditionalDependencies)</AdditionalDependencies>
+	  <AdditionalLibraryDirectories>$(PcoSdkDir)\lib;SensiCam SDK;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
 	  <GenerateDebugInformation>true</GenerateDebugInformation>
 	  <SubSystem>Windows</SubSystem>
 	  <EntryPointSymbol>main</EntryPointSymbol>
@@ -137,7 +213,9 @@
   </ItemGroup>
   <ItemGroup>
 	<ClCompile Include="AssemblyInfo.cpp" />
-	<ClCompile Include="CameraSettings.cpp" />
+	<ClCompile Include="CameraSettings.cpp">
+	  <ExcludedFromBuild Condition="'$(Platform)'=='x64'">true</ExcludedFromBuild>
+	</ClCompile>
 	<ClCompile Include="CameraThread.cpp" />
 	<ClCompile Include="Driver.cpp" />
 	<ClCompile Include="FileThread.cpp" />
@@ -145,14 +223,21 @@
 	<ClCompile Include="forms2.cpp" />
 	<ClCompile Include="ImageData.cpp" />
 	<ClCompile Include="ImageThread.cpp" />
-	<ClCompile Include="SencamDriver.cpp" />
+	<ClCompile Include="PixelflyUsbDriver.cpp" />
+	<ClCompile Include="SencamDriver.cpp">
+	  <ExcludedFromBuild Condition="'$(Platform)'=='x64'">true</ExcludedFromBuild>
+	</ClCompile>
 	<ClCompile Include="SimplicioServer.cpp" />
 	<ClCompile Include="stdafx.cpp">
 	  <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
 	  <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
+	  <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+	  <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
 	</ClCompile>
 	<ClCompile Include="TestDriver.cpp" />
-	<ClCompile Include="WinXDriver.cpp" />
+	<ClCompile Include="WinXDriver.cpp">
+	  <ExcludedFromBuild Condition="'$(Platform)'=='x64'">true</ExcludedFromBuild>
+	</ClCompile>
   </ItemGroup>
   <ItemGroup>
 	<ClInclude Include="CameraSettings.h" />
@@ -164,6 +249,7 @@
 	</ClInclude>
 	<ClInclude Include="ImageData.h" />
 	<ClInclude Include="ImageThread.h" />
+	<ClInclude Include="PixelflyUsbDriver.h" />
 	<ClInclude Include="resource.h" />
 	<ClInclude Include="SencamDriver.h" />
 	<ClInclude Include="SimplicioServer.h" />
@@ -184,6 +270,9 @@
 	</EmbeddedResource>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="CopyPcoRuntime" AfterTargets="Build" Condition="'$(Platform)'=='x64' and Exists('$(PcoSdkDir)\bin\sc2_cam.dll')">
+	<Copy SourceFiles="$(PcoSdkDir)\bin\sc2_cam.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>

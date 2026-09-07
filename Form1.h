@@ -430,7 +430,7 @@ namespace forms2{
 			this->folderLabel->Size = System::Drawing::Size(347, 13);
 			this->folderLabel->TabIndex = 26;
 			this->folderLabel->TabStop = true;
-			this->folderLabel->Text = L"C:\\Documents and Settings\\Lithium\\My Documents\\Online Fitting\\2012";
+			this->folderLabel->Text = L"Click to select save folder";
 			this->folderLabel->Click += gcnew System::EventHandler(this, &Form1::pathClicked);
 			// 
 			// cameraLabel
@@ -445,7 +445,7 @@ namespace forms2{
 			// cameraListBox
 			// 
 			this->cameraListBox->FormattingEnabled = true;
-			this->cameraListBox->Items->AddRange(gcnew cli::array< System::Object^  >(3) {L"No Camera", L"Sensicam", L"Princeton Instruments (WinView)"});
+			this->cameraListBox->Items->AddRange(gcnew cli::array< System::Object^  >(4) {L"No Camera", L"pco.pixelfly 1.4 USB", L"Sensicam", L"Princeton Instruments (WinView)"});
 			this->cameraListBox->Location = System::Drawing::Point(59, 170);
 			this->cameraListBox->Name = L"cameraListBox";
 			this->cameraListBox->Size = System::Drawing::Size(242, 56);
@@ -566,6 +566,7 @@ namespace forms2{
 		bool continueImageLoop;
 		bool interruptImageLoop;
 		String^ filePath;
+		String^ savePath;
 		//UInt16 layers;
 		//CameraSettings camSet;
 		CameraThread^ camThread;
@@ -601,7 +602,7 @@ namespace forms2{
 		void changeCamera();
 	//	void takeImage(Object^ runloop);
 	//	void saveImage(UInt16 rows, UInt16 cols, UInt16 lays, UInt16 *buf);
-		void changePath();
+		bool changePath();
 	//	void setProgressValue(int  value);
 	//	void setProgressValueDirectly(int  value);
 		void setDisplayImage(int stepsBack, int layer);
@@ -655,4 +656,3 @@ private: System::Void serverNameBox_KeyUp(System::Object^  sender, System::Windo
 		 }
 };
 }
-

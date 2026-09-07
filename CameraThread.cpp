@@ -1,13 +1,14 @@
 #include "stdafx.h"
 #include "CameraThread.h"
 #include "form1.h"
-#include "CameraSettings.h"
-#include "sencam.h"
 #include "ImageData.h"
+#ifndef _WIN64
+#include "CameraSettings.h"
 #include "SencamDriver.h"
 #include "WinXDriver.h"
+#endif
 #include "TestDriver.h"
-//#include "SC2Driver.h"
+#include "PixelflyUsbDriver.h"
 
 //#include "cam_types.h"
 
@@ -24,7 +25,11 @@ namespace forms2{
 		setImgMainWindow = gcnew DelegateImg(f,&Form1::addImageData);
 		
 		singleFrame = f->isSingleFrame();
+		#ifdef _WIN64
+		camSet = nullptr;
+		#else
 		camSet = new CameraSettings();
+		#endif
 		//driver = (Driver *) new SencamDriver(); --old, now use ref class
 		//driver = (Driver ^) gcnew SencamDriver();//Driver REF
 		driver = (Driver ^) gcnew TestDriver();//Driver REF
@@ -45,19 +50,25 @@ namespace forms2{
 		return driver->getDriverName();
 	}
 	int CameraThread::changeCamera(String^ camname){
-		if (running || camname->Equals(driver->getDriverName()))
+		if (isRunning() || camname->Equals(driver->getDriverName()))
 			return CAM_NOT_CHANGED;
 		
 		Driver^ newdriver=nullptr;//Driver REF
 		
 		if (camname->Equals(gcnew String(L"Sensicam"))){
+			#ifdef _WIN64
+			MessageBox::Show("The legacy Sensicam adapter is available only in the Win32 build.","Simplicio",MessageBoxButtons::OK);
+			#else
 			newdriver = (Driver ^)gcnew SencamDriver();//Driver REF
+			#endif
 		}else if (camname->Equals(gcnew String(L"No Camera"))){
 			newdriver = (Driver ^)gcnew TestDriver();
-		}else if (camname->Equals(gcnew String(L"SC2 Cam"))){
-			//newdriver = (Driver ^)gcnew SC2Driver();//Driver REF
-			MessageBox::Show("Pixelfly not yet supported.","Simplicio",MessageBoxButtons::OK);
+		}else if (camname->Equals(gcnew String(L"pco.pixelfly 1.4 USB"))){
+			newdriver = (Driver ^)gcnew PixelflyUsbDriver();
 		}else if (camname->Equals(gcnew String(L"Princeton Instruments (WinView)"))){
+			#ifdef _WIN64
+			MessageBox::Show("The legacy WinView adapter is available only in the Win32 build.","Simplicio",MessageBoxButtons::OK);
+			#else
 //			MessageBox::Show("Attempt PI","Simplicio",MessageBoxButtons::OK);
 			try{
 				//MessageBox::Show("Attempt PI","Simplicio",MessageBoxButtons::OK);
@@ -67,6 +78,7 @@ namespace forms2{
 				newdriver=nullptr;
 				MessageBox::Show("Couldn't connect to WinView.","Simplicio",MessageBoxButtons::OK);
 			}
+			#endif
 		}else{
 			MessageBox::Show("Unsupported camera type requested.","Simplicio",MessageBoxButtons::OK);
 		}
@@ -112,7 +124,7 @@ namespace forms2{
 		filePath = String::Copy(path);
 	}
 	void CameraThread::initCamera(){
-		if (running){
+		if (isRunning()){
 			MessageBox::Show("Stop the image acquisition before re-initializing the camera.","Simplicio",MessageBoxButtons::OK);
 			return;
 		}
@@ -125,7 +137,7 @@ namespace forms2{
 		
 	}
 	bool CameraThread::isRunning(){
-		return running;
+		return Interlocked::CompareExchange(running,0,0)!=0;
 	}
 	
 	bool CameraThread::openCameraDialog()
@@ -148,14 +160,19 @@ namespace forms2{
 	bool CameraThread::acquire(int layers, bool runLoop){
 		//start a new thread to acquire images
 		//return true if something prevents the form from starting
-		if (running) return true;
 		if (!cameraInited){
 			MessageBox::Show("Initialize camera first","Box",MessageBoxButtons::OK);return true;}
+		if (Interlocked::CompareExchange(running,1,0)!=0) return true;
 		setContinue(runLoop);
 		setInterrupt(false);
-		
-		Thread^ acquireThread = gcnew Thread(gcnew ParameterizedThreadStart(this,&CameraThread::takeImages));
-		acquireThread->Start(layers);
+		try{
+			Thread^ acquireThread = gcnew Thread(gcnew ParameterizedThreadStart(this,&CameraThread::takeImages));
+			acquireThread->Start(layers);
+		}
+		catch(Exception^){
+			Interlocked::Exchange(running,0);
+			throw;
+		}
 		return false;
 	}
 	void CameraThread::stop(){
@@ -217,10 +234,10 @@ namespace forms2{
 		}
 	}
 	void CameraThread::finishedRunning(){
+		driver->lockCameraDialog(false);
+		Interlocked::Exchange(running,0);
 		if (callBack)
 			mainForm->BeginInvoke(loopFinishedMainWindow);
-		driver->lockCameraDialog(false);
-		running = false;
 	}
 	void CameraThread::readLayers(int layersRead){
 		array<Object^>^ parameters = gcnew array<Object^>(1);
@@ -248,8 +265,11 @@ namespace forms2{
 	{
 		const int layers = (int)layersObj;
 		driver->lockCameraDialog(true);
-		driver->armCamera();
-		running=true;
+		if (driver->armCamera() != 0) {
+			MessageBox::Show("Unable to arm the camera.","Simplicio",MessageBoxButtons::OK);
+			finishedRunning();
+			return;
+		}
 		const int rows = driver->getRows();
 		const int cols = driver->getCols();
 		//MessageBox::Show(String::Concat("rows, cols:",rows,", ",cols),"Box",MessageBoxButtons::OK);
@@ -261,6 +281,7 @@ namespace forms2{
 		if (buf==0){
 			MessageBox::Show("Buffer memory allocation failed.","Box",MessageBoxButtons::OK);
 			finishedRunning();
+			return;
 		}
 		//driver->stop();//remove this
 		

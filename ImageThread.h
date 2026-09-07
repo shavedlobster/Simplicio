@@ -19,14 +19,16 @@ namespace forms2{
 		DelegateBuffersIntImg^ addBuffersMainForm;
 		Form1^ mainForm;
 		ImageData^ imageData;
-		bool processing;
+		int processing;
 		bool saveFile;
 		int binSize;
 		int pixelSize;
+		bool processSingleFrame;
 		array<BufferedGraphics^>^ buffers;
 		int numBuffers;
 		bool singleFrame;
 		void init(Form1^ f);
 		void processNewImage();
+		void renderImage();
 	};
 }

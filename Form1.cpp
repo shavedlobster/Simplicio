@@ -47,6 +47,8 @@ namespace forms2{
 		imgDataIndex = -1;
 		displayedImgInd = 0;
 		displayedLayer = 0;
+		savePath = String::Empty;
+		folderLabel->Text = "Click to select save folder";
 		
 		//imgData = nullptr;
 		//imgDataStack = gcnew Stack(10);
@@ -60,25 +62,6 @@ namespace forms2{
 		serverNameBox->Text = sname;
 		cameraNameLabel->Text = camThread->getCameraDriverName();
 
-		//Load default folder name
-		String^ foldername;
-		String^ line;
-		try{
-			FileStream^ fs = File::Open("settings.txt",FileMode::OpenOrCreate);
-			StreamReader^ sr = gcnew StreamReader(fs);
-			do{
-				line = sr->ReadLine();
-				if (line->Contains("savefolder"))
-				{
-					int ind = line->IndexOf('=');
-					foldername = line->Remove(0,ind+1);
-					folderLabel->Text =  foldername;
-					line = nullptr;
-				}
-			} while (line!=nullptr);
-			sr->Close();
-			fs->Close();
-		}catch (Exception^){}
 	}
 	void Form1::setServerName(String^ name){
 		server->setServerName(name);
@@ -115,6 +98,14 @@ namespace forms2{
 	}
 	*/
 	void Form1::setSaveData(bool savedata){
+		if (savedata && String::IsNullOrWhiteSpace(savePath)){
+			if (!changePath()){
+				camThread->setSave(false);
+				if (saveCheckBox->Checked)
+					saveCheckBox->Checked=false;
+				return;
+			}
+		}
 		camThread->setSave(savedata);
 	}
 	void Form1::addImageData(ImageData^ img){
@@ -236,12 +227,13 @@ namespace forms2{
 	}
 	*/
 	String^ Form1::getSavePath(){
-		return folderLabel->Text;
+		return savePath;
 	}
 	void Form1::saveImage(int stepsBack){
 		int bInd = getHistoryIndex(stepsBack);
 		if (bInd<0) return;
 		if (imgDataArray[bInd]==nullptr) return;
+		if (String::IsNullOrWhiteSpace(savePath) && !changePath()) return;
 		imgDataArray[bInd]->saveFile(getSavePath());
 		setDisplayImage(displayedImgInd,displayedLayer);//updates the save button
 	}
@@ -487,18 +479,22 @@ namespace forms2{
 		//SET_INIT(0);
 		camThread->closeCamera();
 	}
-	void Form1::changePath()
+	bool Form1::changePath()
 	{
 		//if (camThread->isRunning()){
 		//	MessageBox::Show("Stop the image acquisition before changing the path.","Box",MessageBoxButtons::OK);
 		//	return;
 		//}
-		folderBrowserDialog->SelectedPath = getSavePath();
+		if (!String::IsNullOrWhiteSpace(savePath) && Directory::Exists(savePath))
+			folderBrowserDialog->SelectedPath = savePath;
 		System::Windows::Forms::DialogResult result = folderBrowserDialog->ShowDialog();
 		if ( result == System::Windows::Forms::DialogResult::OK ){
-			folderLabel->Text = folderBrowserDialog->SelectedPath;
-			camThread->setPath(folderLabel->Text);
+			savePath = folderBrowserDialog->SelectedPath;
+			folderLabel->Text = savePath;
+			camThread->setPath(savePath);
+			return true;
 		}
+		return false;
 	}
 	
 	void Form1::initCamera()
