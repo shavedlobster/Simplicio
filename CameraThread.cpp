@@ -151,6 +151,14 @@ namespace forms2{
 		}
 		return false;
 		*/
+		if (isRunning()){
+			MessageBox::Show("Stop the image acquisition before changing camera settings.","Simplicio",MessageBoxButtons::OK);
+			return true;
+		}
+		if (!cameraInited){
+			MessageBox::Show("Initialize camera first.","Simplicio",MessageBoxButtons::OK);
+			return true;
+		}
 		if (driver->openCameraDialog())
 			return true;//errors occurred
 		else

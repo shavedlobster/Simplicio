@@ -12,7 +12,22 @@
 
 namespace forms2 {
 	using namespace System;
+	using namespace System::Drawing;
 	using namespace System::Windows::Forms;
+
+	static void addSettingsRow(TableLayoutPanel^ table, int row, String^ name, Control^ control, String^ note) {
+		Label^ nameLabel = gcnew Label();
+		nameLabel->Text = name;
+		nameLabel->AutoSize = true;
+		nameLabel->Anchor = AnchorStyles::Left;
+		table->Controls->Add(nameLabel, 0, row);
+		table->Controls->Add(control, 1, row);
+		Label^ noteLabel = gcnew Label();
+		noteLabel->Text = note;
+		noteLabel->AutoSize = true;
+		noteLabel->Anchor = AnchorStyles::Left;
+		table->Controls->Add(noteLabel, 2, row);
+	}
 
 	PixelflyUsbDriver::PixelflyUsbDriver()
 		: camera(NULL), bufferEvent(NULL), bufferNumber(-1), cameraBuffer(NULL),
@@ -82,9 +97,210 @@ namespace forms2 {
 	}
 
 	int PixelflyUsbDriver::openCameraDialog() {
-		MessageBox::Show(
-			"Camera settings are currently read from the camera. Use pco.camware to set and test exposure before opening Simplicio.",
-			"pco.pixelfly 1.4 USB", MessageBoxButtons::OK, MessageBoxIcon::Information);
+		if (camera == NULL) {
+			MessageBox::Show("Initialize the camera before opening its settings.",
+				"pco.pixelfly 1.4 USB", MessageBoxButtons::OK, MessageBoxIcon::Warning);
+			return INIT_ERROR;
+		}
+
+		WORD recordingState = 0;
+		lastError = PCO_GetRecordingState(camera, &recordingState);
+		if (lastError != PCO_NOERROR) {
+			showSdkError("Reading recording state", lastError);
+			return INIT_ERROR;
+		}
+		if (recordingState != 0) {
+			MessageBox::Show("Stop image acquisition before changing camera settings.",
+				"pco.pixelfly 1.4 USB", MessageBoxButtons::OK, MessageBoxIcon::Information);
+			return INIT_ERROR;
+		}
+
+		PCO_Description description = {};
+		description.wSize = sizeof(description);
+		DWORD delay = 0;
+		DWORD exposure = 0;
+		WORD delayBase = 0;
+		WORD exposureBase = 0;
+		WORD x0 = 1, y0 = 1, x1 = 0, y1 = 0;
+		WORD binH = 1, binV = 1;
+		WORD actualWidth = 0, actualHeight = 0, maxWidth = 0, maxHeight = 0;
+
+		lastError = PCO_GetCameraDescription(camera, &description);
+		if (lastError == PCO_NOERROR)
+			lastError = PCO_GetDelayExposureTime(camera, &delay, &exposure, &delayBase, &exposureBase);
+		if (lastError == PCO_NOERROR)
+			lastError = PCO_GetROI(camera, &x0, &y0, &x1, &y1);
+		if (lastError == PCO_NOERROR)
+			lastError = PCO_GetBinning(camera, &binH, &binV);
+		if (lastError == PCO_NOERROR)
+			lastError = PCO_GetSizes(camera, &actualWidth, &actualHeight, &maxWidth, &maxHeight);
+		if (lastError != PCO_NOERROR) {
+			showSdkError("Reading camera settings", lastError);
+			return INIT_ERROR;
+		}
+
+		double exposureMs = exposureBase == 0 ? exposure / 1000000.0 :
+			(exposureBase == 1 ? exposure / 1000.0 : (double)exposure);
+		double minimumExposureMs = description.dwMinExposureDESC / 1000000.0;
+		double maximumExposureMs = (double)description.dwMaxExposureDESC;
+		if (maximumExposureMs < minimumExposureMs)
+			maximumExposureMs = minimumExposureMs;
+
+		Form^ dialog = gcnew Form();
+		dialog->Text = "pco.pixelfly 1.4 USB Settings";
+		dialog->FormBorderStyle = FormBorderStyle::FixedDialog;
+		dialog->StartPosition = FormStartPosition::CenterParent;
+		dialog->MinimizeBox = false;
+		dialog->MaximizeBox = false;
+		dialog->ShowInTaskbar = false;
+		dialog->ClientSize = System::Drawing::Size(520, 390);
+
+		TableLayoutPanel^ table = gcnew TableLayoutPanel();
+		table->Dock = DockStyle::Fill;
+		table->Padding = Padding(12);
+		table->ColumnCount = 3;
+		table->RowCount = 10;
+		table->ColumnStyles->Add(gcnew ColumnStyle(SizeType::Absolute, 145));
+		table->ColumnStyles->Add(gcnew ColumnStyle(SizeType::Absolute, 145));
+		table->ColumnStyles->Add(gcnew ColumnStyle(SizeType::Percent, 100));
+
+		NumericUpDown^ exposureBox = gcnew NumericUpDown();
+		exposureBox->DecimalPlaces = 6;
+		exposureBox->Minimum = Convert::ToDecimal(minimumExposureMs);
+		exposureBox->Maximum = Convert::ToDecimal(maximumExposureMs);
+		exposureBox->Increment = Convert::ToDecimal(0.001);
+		exposureBox->Value = Convert::ToDecimal(Math::Min(Math::Max(exposureMs, minimumExposureMs), maximumExposureMs));
+		exposureBox->Width = 130;
+
+		NumericUpDown^ binHBox = gcnew NumericUpDown();
+		binHBox->Minimum = 1;
+		binHBox->Maximum = Math::Max((int)description.wMaxBinHorzDESC, 1);
+		binHBox->Value = binH;
+		NumericUpDown^ binVBox = gcnew NumericUpDown();
+		binVBox->Minimum = 1;
+		binVBox->Maximum = Math::Max((int)description.wMaxBinVertDESC, 1);
+		binVBox->Value = binV;
+
+		NumericUpDown^ x0Box = gcnew NumericUpDown();
+		NumericUpDown^ x1Box = gcnew NumericUpDown();
+		NumericUpDown^ y0Box = gcnew NumericUpDown();
+		NumericUpDown^ y1Box = gcnew NumericUpDown();
+		array<NumericUpDown^>^ roiBoxes = gcnew array<NumericUpDown^>(4) { x0Box, x1Box, y0Box, y1Box };
+		for each (NumericUpDown^ box in roiBoxes) {
+			box->Minimum = 1;
+			box->Width = 130;
+		}
+		x0Box->Maximum = Math::Max((int)description.wMaxHorzResStdDESC, 1);
+		x1Box->Maximum = Math::Max((int)description.wMaxHorzResStdDESC, 1);
+		y0Box->Maximum = Math::Max((int)description.wMaxVertResStdDESC, 1);
+		y1Box->Maximum = Math::Max((int)description.wMaxVertResStdDESC, 1);
+		x0Box->Increment = Math::Max((int)description.wRoiHorStepsDESC, 1);
+		x1Box->Increment = Math::Max((int)description.wRoiHorStepsDESC, 1);
+		y0Box->Increment = Math::Max((int)description.wRoiVertStepsDESC, 1);
+		y1Box->Increment = Math::Max((int)description.wRoiVertStepsDESC, 1);
+		x0Box->Value = x0; x1Box->Value = x1;
+		y0Box->Value = y0; y1Box->Value = y1;
+
+		addSettingsRow(table, 0, "Exposure", exposureBox, "ms");
+		addSettingsRow(table, 1, "Horizontal binning", binHBox,
+			description.wBinHorzSteppingDESC == 0 ? "powers of two" : "linear values");
+		addSettingsRow(table, 2, "Vertical binning", binVBox,
+			description.wBinVertSteppingDESC == 0 ? "powers of two" : "linear values");
+		addSettingsRow(table, 3, "ROI X start", x0Box, String::Format("step {0}", Math::Max((int)description.wRoiHorStepsDESC, 1)));
+		addSettingsRow(table, 4, "ROI X end", x1Box, String::Format("minimum width {0}", description.wMinSizeHorzDESC));
+		addSettingsRow(table, 5, "ROI Y start", y0Box, String::Format("step {0}", Math::Max((int)description.wRoiVertStepsDESC, 1)));
+		addSettingsRow(table, 6, "ROI Y end", y1Box, String::Format("minimum height {0}", description.wMinSizeVertDESC));
+		addSettingsRow(table, 7, "Current image size", gcnew Label(), String::Format("{0} x {1} pixels", actualWidth, actualHeight));
+		addSettingsRow(table, 8, "Dynamic resolution", gcnew Label(), String::Format("{0} bit", description.wDynResDESC));
+
+		Label^ instruction = gcnew Label();
+		instruction->Text = "Apply writes these values through the PCO SDK. The camera remains in software-trigger mode for Simplicio acquisition.";
+		instruction->AutoSize = true;
+		instruction->MaximumSize = System::Drawing::Size(470, 0);
+		table->Controls->Add(instruction, 0, 9);
+		table->SetColumnSpan(instruction, 3);
+
+		FlowLayoutPanel^ buttons = gcnew FlowLayoutPanel();
+		buttons->FlowDirection = FlowDirection::RightToLeft;
+		buttons->Dock = DockStyle::Bottom;
+		buttons->Height = 48;
+		buttons->Padding = Padding(8);
+		Button^ cancelButton = gcnew Button();
+		cancelButton->Text = "Cancel";
+		cancelButton->DialogResult = System::Windows::Forms::DialogResult::Cancel;
+		Button^ applyButton = gcnew Button();
+		applyButton->Text = "Apply";
+		applyButton->DialogResult = System::Windows::Forms::DialogResult::OK;
+		buttons->Controls->Add(cancelButton);
+		buttons->Controls->Add(applyButton);
+		dialog->CancelButton = cancelButton;
+		dialog->AcceptButton = applyButton;
+		dialog->Controls->Add(table);
+		dialog->Controls->Add(buttons);
+
+		if (dialog->ShowDialog() != System::Windows::Forms::DialogResult::OK)
+			return 0;
+
+		WORD newBinH = Decimal::ToUInt16(binHBox->Value);
+		WORD newBinV = Decimal::ToUInt16(binVBox->Value);
+		bool validBinH = description.wBinHorzSteppingDESC != 0 || (newBinH & (newBinH - 1)) == 0;
+		bool validBinV = description.wBinVertSteppingDESC != 0 || (newBinV & (newBinV - 1)) == 0;
+		WORD newX0 = Decimal::ToUInt16(x0Box->Value);
+		WORD newX1 = Decimal::ToUInt16(x1Box->Value);
+		WORD newY0 = Decimal::ToUInt16(y0Box->Value);
+		WORD newY1 = Decimal::ToUInt16(y1Box->Value);
+		int roiWidth = newX1 - newX0 + 1;
+		int roiHeight = newY1 - newY0 + 1;
+		if (!validBinH || !validBinV || newX1 < newX0 || newY1 < newY0 ||
+			roiWidth < description.wMinSizeHorzDESC || roiHeight < description.wMinSizeVertDESC) {
+			MessageBox::Show("The selected binning or ROI is outside the limits reported by the camera.",
+				"pco.pixelfly 1.4 USB", MessageBoxButtons::OK, MessageBoxIcon::Warning);
+			return INIT_ERROR;
+		}
+
+		double newExposureMs = Decimal::ToDouble(exposureBox->Value);
+		WORD newExposureBase;
+		DWORD newExposure;
+		if (newExposureMs * 1000000.0 <= UInt32::MaxValue) {
+			newExposureBase = 0;
+			newExposure = (DWORD)Math::Max(1.0, Math::Round(newExposureMs * 1000000.0));
+		}
+		else if (newExposureMs * 1000.0 <= UInt32::MaxValue) {
+			newExposureBase = 1;
+			newExposure = (DWORD)Math::Max(1.0, Math::Round(newExposureMs * 1000.0));
+		}
+		else {
+			newExposureBase = 2;
+			newExposure = (DWORD)Math::Max(1.0, Math::Round(newExposureMs));
+		}
+
+		stop();
+		releaseBuffer();
+		lastError = PCO_SetDelayExposureTime(camera, delay, newExposure, delayBase, newExposureBase);
+		if (lastError == PCO_NOERROR)
+			lastError = PCO_SetROI(camera, newX0, newY0, newX1, newY1);
+		if (lastError == PCO_NOERROR)
+			lastError = PCO_SetBinning(camera, newBinH, newBinV);
+		if (lastError == PCO_NOERROR)
+			lastError = PCO_ArmCamera(camera);
+		if (lastError == PCO_NOERROR)
+			lastError = PCO_GetSizes(camera, &actualWidth, &actualHeight, &maxWidth, &maxHeight);
+
+		if (lastError != PCO_NOERROR) {
+			int applyError = lastError;
+			PCO_SetBinning(camera, binH, binV);
+			PCO_SetROI(camera, x0, y0, x1, y1);
+			PCO_SetDelayExposureTime(camera, delay, exposure, delayBase, exposureBase);
+			PCO_ArmCamera(camera);
+			getSettings();
+			showSdkError("Applying camera settings", applyError);
+			return INIT_ERROR;
+		}
+
+		imageWidth = actualWidth;
+		imageHeight = actualHeight;
+		bitResolution = description.wDynResDESC;
+		getSettings();
 		return 0;
 	}
 

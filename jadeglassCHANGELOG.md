@@ -150,8 +150,6 @@ All changes in this section remain uncommitted in the local `vs2026` checkout.
 
 - Rebuilt and linked the complete Debug x64 project successfully to the local `x64\CodexValidation` output directory.
 - The existing obsolete .NET security-attribute warning remains unrelated.
-- A physical-camera rapid-click test remains to be run after rebuilding the normal Debug x64 output.
-- No commit or push was performed.
 
 ## 2026-09-02 — Handle missing AIA save folders
 
@@ -219,3 +217,38 @@ All changes in this section remain uncommitted in the local `vs2026` checkout.
 
 - Rebuilt and linked the complete Debug x64 project successfully from a clean clone of `shavedlobster/Simplicio` with the checkpoint files applied.
 - The existing obsolete .NET security-attribute warning remains unrelated.
+
+## 2026-09-07 — Link Camera Settings to the pco.pixelfly SDK
+
+These changes were developed and physically validated in the local `vs2026` Visual Studio checkout before preparing the fork update.
+
+### Explained structure
+
+- The form's `Camera Settings` button calls `Form1::openCameraDialog`, which delegates to `CameraThread::openCameraDialog`, which then calls the active camera `Driver` implementation.
+- The legacy Sensicam implementation receives a vendor-provided dialog from `OPEN_DIALOG_CAM`. The PCO SC2 SDK exposes setting functions but no equivalent drop-in dialog, so the Pixelfly adapter now constructs its own WinForms dialog and keeps all PCO calls inside `PixelflyUsbDriver`.
+
+### Changed
+
+- `CameraThread.cpp`, `openCameraDialog`
+  - Rejects settings access while acquisition is running.
+  - Requires the selected camera to be initialized before opening settings.
+
+- `PixelflyUsbDriver.cpp`, `openCameraDialog`
+  - Replaced the informational Camware message with a Pixelfly settings dialog.
+  - Reads exposure, ROI, binning, current image size, dynamic bit depth, and camera-specific limits from the PCO SDK.
+  - Allows exposure in milliseconds, horizontal and vertical binning, and all four ROI coordinates to be edited.
+  - Shows whether each binning axis uses powers of two or linear steps, plus the reported ROI steps and minimum dimensions.
+  - Validates basic binning and ROI limits before sending values to the camera.
+  - Stops recording and releases the old transfer buffer before applying settings.
+  - Applies exposure with `PCO_SetDelayExposureTime`, ROI with `PCO_SetROI`, and binning with `PCO_SetBinning`, then calls `PCO_ArmCamera` and refreshes the resulting image dimensions.
+  - Attempts to restore the previous camera values if applying or arming the new configuration fails.
+  - Leaves software-trigger selection under the existing acquisition path rather than exposing a setting that Simplicio would overwrite.
+
+### Validation
+
+- Rebuilt and linked the complete Debug x64 project successfully to the local `x64\CodexValidation` output directory.
+- The first build identified and the final code corrected invalid chained assignments to managed NumericUpDown properties.
+- The existing obsolete .NET security-attribute warning remains unrelated.
+- User-reported physical-camera validation passed: the settings dialog opens, settings apply, and image acquisition continues to work with the Pixelfly.
+- A physical-camera rapid-click test remains to be run after rebuilding the normal Debug x64 output.
+- Prepared for a fork-only commit to `shavedlobster/Simplicio`; no change was made to `atsommer/Simplicio`.
