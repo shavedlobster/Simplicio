@@ -306,3 +306,79 @@ These changes are local to the `vs2026` Visual Studio checkout pending visual va
 - Compiled the changed `ImageThread.cpp` successfully as x64 C++/CLI against the project's assemblies.
 - Rebuild Debug x64 and compare full `1392 x 1040`, centered `800 x 600`, and binned captures.
 - Confirm each complete frame is visible, centered, and undistorted, and that the timestamp/value box remains within the panel.
+
+## 2026-10-05 — Add a Python AIA reader and four-dimensional series loader
+
+These changes are local to the `shavedlobster/Simplicio` fork checkout. The existing C++ AIA writer was not changed.
+
+### Reference validation
+
+- Inspected the supplied Sommer Lab `AnalysisCodeNew` package and its Git history.
+- Confirmed that its expected raw-image array order is `(iteration, picture, row, column)`.
+- Confirmed that its four-frame burn-in mode interprets the frames as burn-in/reference, probe with atoms, probe without atoms, and dark/background.
+- Confirmed that the analysis package did not previously contain an AIA reader.
+- Parsed the supplied Pixelfly file `2026-09-02-16;07;48.aia` as a valid three-exposure, `1040 x 1392`, unsigned 16-bit image set with no trailing sequence-variable metadata.
+
+### Added
+
+- `AIAReader.py`
+  - Validates the AIA signature, pixel width, dimensions, and payload length.
+  - Reads one AIA file into a NumPy array ordered `(exposure, row, column)`.
+  - Decodes optional sequence-variable metadata written after the pixel payload.
+  - Sorts and stacks a file or folder into `(set, exposure, row, column)`.
+  - Requires four exposures by default while allowing legacy exposure counts explicitly.
+  - Provides a command-line option to validate a series and save it as `.npy`.
+
+- `AIA_PYTHON_README.md`
+  - Documents dimensions, four-frame interpretations, the binary layout, Python examples, and command-line use.
+
+- `tests/test_aia_reader.py`
+  - Verifies pixel ordering, metadata decoding, deterministic set ordering, legacy three-frame loading, four-frame validation, and truncated-file rejection using synthetic AIA fixtures.
+
+### Remaining hardware validation
+
+- Capture and load a real four-exposure Pixelfly AIA file. The supplied real file contains three exposures, so four-exposure behavior is covered by the byte-level test fixture but not yet by a physical-camera file.
+
+## 2026-10-14 — Validate AIA integration against the live analysis repository
+
+These changes are local to the `shavedlobster/Simplicio` fork checkout. No C++ acquisition or file-writing code was changed.
+
+### Reference validation
+
+- Fetched the current `main` branch of `insommer/AnalysisCodeNew` and checked commit `074594a58901286af7bd7c40b9505b70aca5935d` from October 8, 2026. The supplied ZIP was six commits behind that version.
+- Confirmed that `LoadSpooledSeriesV2()` and the downstream analysis functions use the raw-image order `(iteration, picture, row, column)`, matching `load_aia_series()` output `(set, exposure, row, column)`.
+- Confirmed the live `absImagingSimpleV2()` four-frame formulas: burn-in mode uses `(frame 1 - frame 0) / (frame 2 - frame 3)`, while skip-first mode discards frame 0 and applies the normal three-frame calculation to frames 1 through 3.
+- Ran a synthetic four-exposure AIA series from `AIAReader.py` through the exact live `absImagingSimpleV2()` function. Both four-frame paths produced the expected optical density.
+- Confirmed that the live repository contains no AIA reader and that `PreprocessBinImgs()` currently recognizes only Zyla `.dat` and Chameleon `.pgm` input. `Analyze_Atom_Pictures.py` therefore cannot select or load Pixelfly AIA data without an additional integration change.
+
+### Changed
+
+- `AIA_PYTHON_README.md`
+  - Documented the current direct integration path from `load_aia_series()` to `absImagingSimpleV2()`.
+  - Documented why the existing `PreprocessBinImgs()` and `Analyze_Atom_Pictures.py` paths do not yet accept Pixelfly AIA files.
+  - Recorded the live analysis commit and compatibility result.
+
+- `.gitignore`
+  - Ignores Python bytecode and `__pycache__` directories generated while running the AIA reader tests.
+
+### Remaining validation
+
+- Capture a real four-exposure Pixelfly AIA set and run it through the complete analysis workflow.
+- Add a Pixelfly/AIA branch to the analysis repository if Pixelfly should be selectable from `Analyze_Atom_Pictures.py` rather than loaded directly in Python.
+
+## 2026-10-15 — Validate a physical four-exposure Pixelfly AIA file
+
+This was a validation-only step. No C++ acquisition or AIA-writing code was changed.
+
+### Validation
+
+- Parsed the physical-camera file `2026-10-15-10;59;55.aia` with `AIAReader.py`.
+- Confirmed an array shape of `(4, 1040, 1392)` with unsigned 16-bit pixels.
+- Confirmed that the file size exactly equals the 11-byte AIA header plus four complete full-resolution image payloads, with no truncation or unexpected trailing bytes.
+- Confirmed that this manually triggered acquisition contains no sequence-variable metadata, which is expected because the current writer only appends list-driven variables received from Cicero.
+- This completes physical validation that Simplicio can save four Pixelfly exposures in one AIA file.
+
+### Remaining validation
+
+- Capture a controlled four-frame sequence with deliberately different image states to verify the physical meaning and order of frames 0 through 3.
+- Run a real four-exposure series through the complete Sommer Lab optical-density analysis workflow.
