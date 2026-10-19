@@ -23,6 +23,9 @@ namespace forms2 {
 		virtual int getImageHeight() override;
 		virtual void readImage(System::UInt16* buffer) override;
 		virtual int armCamera() override;
+		virtual void beginImageSet() override;
+		virtual void setExternalStart(bool enabled) override { externalStart = enabled; }
+		virtual bool supportsExternalStart() override { return true; }
 		virtual System::String^ getDriverName() override {
 			return gcnew System::String("pco.pixelfly 1.4 USB");
 		}
@@ -47,6 +50,10 @@ namespace forms2 {
 		int lastError;
 		bool framePending;
 		bool recording;
+		bool externalStart;
+		bool waitingForExternalStart;
+		bool externalStartSawLow;
+		bool softwareTriggerIssued;
 
 		void releaseBuffer();
 		void showSdkError(System::String^ operation, int errorCode);

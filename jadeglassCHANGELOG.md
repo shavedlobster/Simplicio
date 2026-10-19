@@ -2,6 +2,105 @@
 
 This file records changes made for the jadeglass Pixelfly adaptation of Simplicio.
 
+## 2026-10-19 — Make the external signal start a complete exposure set
+
+These changes are included on branch `vs2026` in the user's `shavedlobster/Simplicio` fork.
+
+### Finding
+
+- The **Exposures per image** value was already passed from `Form1` to `CameraThread`, which loops exactly that many times.
+- The previous Pixelfly mode waited for a separate hardware trigger inside every exposure iteration, so a four-exposure set required four manual pulses.
+- The `insommer/Simplicio` UI calls the intended mode `Ext Start`, indicating that the external signal starts the set rather than directly timing every exposure.
+
+### Changed
+
+- `Driver.h`, `CameraThread.h`, and `CameraThread.cpp`
+  - Rename the camera capability from External Trigger to External Start.
+  - Notify the driver at the beginning of every complete image set.
+- `PixelflyUsbDriver.h` and `PixelflyUsbDriver.cpp`
+  - Arm in PCO software-trigger mode for both Internal and Ext Start operation.
+  - In Ext Start mode, queue the first frame and nonblockingly watch the physical exposure-trigger input.
+  - Require a low-to-high transition so a stale high signal cannot start multiple repeated sets.
+  - After the start transition, call `PCO_ForceTrigger` once for every exposure requested by Simplicio without requiring more external pulses.
+  - Reset the external-start state for each set during repeated acquisition and keep Interrupt Acquisition responsive while waiting.
+- `Form1.h` and `Form1.cpp`
+  - Rename the selector option from `External` to `Ext Start` to describe the behavior accurately.
+- `PIXELFLY_SETUP.md`
+  - Document one external start event per image set and automatic triggering of the selected exposure count.
+
+### Validation
+
+- Verified the control flow: `Form1` passes the selected exposure count to `CameraThread`; `beginImageSet()` runs once per set; and the `for (lay < layers)` loop calls `expose()` exactly once per selected exposure.
+- `Debug | x64` compiled and linked successfully with 64-bit MSBuild in both the working checkout and the active Visual Studio source checkout: 0 errors and the existing obsolete security-attribute warning.
+- The active checkout's standard `x64\Debug\forms2.exe` remained locked by the previous process/debug session, so its verified current binary was written to `x64\DebugExtStart\forms2.exe`.
+- Physical validation with the Pixelfly trigger input remains required.
+
+## 2026-10-19 — Port Pixelfly external-trigger support
+
+These changes are included on branch `vs2026` in the user's `shavedlobster/Simplicio` fork.
+
+### Source reviewed
+
+- Fetched the current `insommer/Simplicio` `vs2026` branch.
+- Used commits `036c385` (trigger-mode selector) and `07dfbf3` (Cicero/Pixelfly external-trigger wiring) as the reference implementation.
+- Did not merge the lab branch wholesale, so the local metadata-emulator and camera-setting work remains intact.
+
+### Changed
+
+- `Form1.h` and `Form1.cpp`
+  - Add an Internal/External trigger selector, defaulting to Internal.
+  - Apply the selected mode before every acquisition, including acquisitions started by Cicero.
+  - Lock the selector while acquisition is active and restore it afterward.
+  - Reject External mode for camera adapters that do not explicitly support it.
+  - Move the Debug-only metadata-emulator button below the server controls so it no longer overlaps the acquisition indicator.
+- `Driver.h`, `CameraThread.h`, and `CameraThread.cpp`
+  - Add an instance-level trigger-mode interface and pass the selected mode to the active camera driver.
+  - Poll image completion at 1 ms intervals so waiting for an external trigger does not run a full-speed busy loop.
+- `PixelflyUsbDriver.h` and `PixelflyUsbDriver.cpp`
+  - Store trigger mode per Pixelfly instance.
+  - Arm with the PCO SDK's software-trigger or external-trigger constant.
+  - Continue using `PCO_ForceTrigger` only for Internal mode.
+  - In External mode, queue the transfer buffer and wait for the hardware trigger to complete it; the existing Interrupt Acquisition path can cancel the wait.
+- `PIXELFLY_SETUP.md`
+  - Document both trigger modes, the four-pulse requirement for a four-exposure set, cancellation behavior, and the physical-signal safety boundary.
+
+### Deliberate differences from `insommer/Simplicio`
+
+- Do not use a static trigger flag shared by every driver instance.
+- Reset the driver to Internal whenever Internal is selected; the lab implementation only set the flag to External.
+- Do not poll `PCO_GetExpTrigSignalStatus` indefinitely and then call `PCO_ForceTrigger` in external mode.
+
+### Validation
+
+- `Debug | x64` and `Release | x64` compiled successfully with Visual Studio 2026 MSBuild 18.9.1: 0 errors and the existing obsolete security-attribute warning.
+- All 5 Python AIA reader regression tests passed with `unittest`.
+- Confirmed that Visual Studio was still running the older checkout at `C:\Users\jadeg\source\repos\Simplicio`; synchronized only the reviewed trigger and metadata files into that local checkout without committing or pushing them.
+- Built the active Visual Studio checkout with 64-bit MSBuild. Its existing `x64\Debug\forms2.exe` was locked by the prior Visual Studio/debug session, so the verified current executable was written to `x64\DebugTrigger\forms2.exe`; that binary contains the earlier `Trigger:` and `External` UI strings. The standard Visual Studio output still needs to be rebuilt after the old process/debug session releases its executable.
+- Physical Pixelfly trigger validation remains pending.
+
+## 2026-10-15 — Add a local Cicero metadata emulator
+
+These changes are included on branch `vs2026` in the user's `shavedlobster/Simplicio` fork.
+
+### Added
+
+- `CICERO_METADATA_TEST.md`
+  - Documents the Debug-only emulator workflow, its fixed test variables, the Python validation command, and the parts of the real Cicero pipeline that it does not test.
+
+### Changed
+
+- `Form1.h`, `Form1.cpp`, and `CameraThread.h`
+  - Add a `Test Cicero Metadata (Debug)` button only when the application is compiled with `_DEBUG`.
+  - Require an initialized and idle camera, an existing selected save folder, and enabled saving before the emulator can start.
+  - Create three known numeric variables, force a four-exposure acquisition, and send them through the existing `Form1::sequenceStarted` path used by Cicero.
+  - Keep Release builds and normal acquisition behavior unchanged.
+
+### Validation
+
+- `Debug | x64` and `Release | x64` compiled successfully with Visual Studio 2026 MSBuild 18.9.1: 0 errors and the existing obsolete security-attribute warning.
+- All 5 Python AIA reader regression tests passed with `unittest`.
+- Physical-camera validation remains to be performed with the Debug x64 application and Pixelfly camera.
+
 ## Repository policy
 
 - Keep work local unless it is explicitly sent to the user's fork.
@@ -10,7 +109,7 @@ This file records changes made for the jadeglass Pixelfly adaptation of Simplici
 - Record the affected file locations, the purpose of the change, and the validation performed.
 - Do not include unrelated pre-existing working-tree changes in commits or patches.
 
-At initialization, the local checkout's `origin` remote points to `https://github.com/atsommer/Simplicio.git`. No fork remote is currently configured, so all changes listed below remain local.
+At initialization, the active Visual Studio checkout's `origin` remote pointed to `https://github.com/atsommer/Simplicio.git`. Publishing is performed from a separate checkout whose `origin` is the user's `shavedlobster/Simplicio` fork.
 
 ## 2026-09-02 — Initialize change log
 

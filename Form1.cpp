@@ -62,7 +62,59 @@ namespace forms2{
 		serverNameBox->Text = sname;
 		cameraNameLabel->Text = camThread->getCameraDriverName();
 
+#ifdef _DEBUG
+		initializeCiceroMetadataTestButton();
+#endif
+
 	}
+#ifdef _DEBUG
+	void Form1::initializeCiceroMetadataTestButton(){
+		ciceroMetadataTestButton = gcnew Button();
+		ciceroMetadataTestButton->Location = Point(59,885);
+		ciceroMetadataTestButton->Name = "ciceroMetadataTestButton";
+		ciceroMetadataTestButton->Size = System::Drawing::Size(242,32);
+		ciceroMetadataTestButton->TabIndex = 50;
+		ciceroMetadataTestButton->Text = "Test Cicero Metadata (Debug)";
+		ciceroMetadataTestButton->UseVisualStyleBackColor = true;
+		ciceroMetadataTestButton->Click += gcnew EventHandler(this,&Form1::ciceroMetadataTestButton_Click);
+		Controls->Add(ciceroMetadataTestButton);
+	}
+
+	System::Void Form1::ciceroMetadataTestButton_Click(System::Object^ sender, System::EventArgs^ e){
+		if (!camThread->isCameraInitialized()){
+			MessageBox::Show("Initialize the camera before running the metadata test.",
+				"Cicero Metadata Test",MessageBoxButtons::OK,MessageBoxIcon::Information);
+			return;
+		}
+		if (camThread->isRunning()){
+			MessageBox::Show("Wait for the current acquisition to finish before running the metadata test.",
+				"Cicero Metadata Test",MessageBoxButtons::OK,MessageBoxIcon::Information);
+			return;
+		}
+		if (!saveCheckBox->Checked || String::IsNullOrWhiteSpace(savePath) || !Directory::Exists(savePath)){
+			MessageBox::Show("Select an existing save folder and enable Save before running the metadata test.",
+				"Cicero Metadata Test",MessageBoxButtons::OK,MessageBoxIcon::Information);
+			return;
+		}
+
+		LinkedList<Variable^>^ testVariables = gcnew LinkedList<Variable^>();
+		array<String^>^ names = gcnew array<String^>{
+			"emulator.sequence_id",
+			"emulator.magnetic_field",
+			"emulator.imaging_frequency_mhz"
+		};
+		array<double>^ values = gcnew array<double>{42.0,4.5,110.2};
+		for (int index=0; index<names->Length; index++){
+			Variable^ variable = gcnew Variable();
+			variable->VariableName = names[index];
+			variable->VariableValue = values[index];
+			testVariables->AddLast(variable);
+		}
+
+		layersBox->Value = 4;
+		sequenceStarted(testVariables);
+	}
+#endif
 	void Form1::setServerName(String^ name){
 		server->setServerName(name);
 		currentServerNameLabel->Text = server->getServerName();
@@ -546,10 +598,17 @@ namespace forms2{
 	
 	void Form1::acquire(bool runLoop)
 	{
+		bool externalStart = triggerBox->SelectedIndex == 1;
+		if (!camThread->setExternalStart(externalStart)){
+			MessageBox::Show("The selected camera does not support Simplicio's external-start mode.",
+				"Simplicio",MessageBoxButtons::OK,MessageBoxIcon::Warning);
+			return;
+		}
 		bool err = camThread->acquire((int)layersBox->Value,runLoop);
 		if (!err){
 			runIndicator->Checked = true;
 			layersBox->Enabled = false;
+			triggerBox->Enabled = false;
 			imageProgressBar->Maximum = (int)layersBox->Value;
 			imageProgressBar->Value = 0;
 		}
@@ -592,6 +651,7 @@ namespace forms2{
 	}
 	void Form1::loopFinished(){
 		layersBox->Enabled = true;
+		triggerBox->Enabled = true;
 		runIndicator->Checked = false;
 	}
 	void Form1::setNextTime(DateTime nextTime){

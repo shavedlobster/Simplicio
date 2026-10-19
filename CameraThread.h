@@ -23,6 +23,8 @@ namespace forms2{
 		void interrupt(bool callback); 
 		bool openCameraDialog();
 		bool isRunning();
+		bool isCameraInitialized(){return cameraInited;}
+		bool setExternalStart(bool externalStart);
 		void setSingleFrame(bool sf){singleFrame=sf;}
 		bool getSingleFrame() {return singleFrame;}
 		void setPath(String^ path);

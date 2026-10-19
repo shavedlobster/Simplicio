@@ -139,6 +139,12 @@ namespace forms2{
 	bool CameraThread::isRunning(){
 		return Interlocked::CompareExchange(running,0,0)!=0;
 	}
+	bool CameraThread::setExternalStart(bool externalStart){
+		if (externalStart && !driver->supportsExternalStart())
+			return false;
+		driver->setExternalStart(externalStart);
+		return true;
+	}
 	
 	bool CameraThread::openCameraDialog()
 	{//opens the camera settings dialogue box
@@ -297,6 +303,7 @@ namespace forms2{
 		do{//loop for several images
 			int layersRead = 0;		
 			readLayers(layersRead);
+			driver->beginImageSet();
 			//loop over each layer of the current image
 			for (int lay=0;lay<layers;lay++)
 			{
@@ -308,7 +315,7 @@ namespace forms2{
 				do{
 					//errS=GET_IMAGE_STATUS(&picstat);
 					imgstatus = driver->getImageStatus();
-					Thread::Sleep(0);
+					Thread::Sleep(1);
 				//}while (errS==0 && ((picstat&0x02)!=0 || (dbl==4 && (picstat&16) == 0)) && !getInterrupt());
 				} while (imgstatus == Driver::CAMERA_BUSY && !getInterrupt());		 
 				if (getInterrupt()) break;

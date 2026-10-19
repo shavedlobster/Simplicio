@@ -32,7 +32,9 @@ namespace forms2 {
 	PixelflyUsbDriver::PixelflyUsbDriver()
 		: camera(NULL), bufferEvent(NULL), bufferNumber(-1), cameraBuffer(NULL),
 		  imageWidth(0), imageHeight(0), bitResolution(16), bufferBytes(0),
-		  lastError(PCO_NOERROR), framePending(false), recording(false) {
+		  lastError(PCO_NOERROR), framePending(false), recording(false),
+		  externalStart(false), waitingForExternalStart(false),
+		  externalStartSawLow(false), softwareTriggerIssued(false) {
 		roix1 = roiy1 = 1;
 		roix2 = roiy2 = 0;
 		hbin = vbin = 1;
@@ -340,7 +342,9 @@ namespace forms2 {
 		stop();
 		releaseBuffer();
 
-		lastError = PCO_SetTriggerMode(camera, 0x0001); // Software trigger.
+		// External Start observes the hardware trigger input once, then uses the
+		// supported software-trigger path for every exposure in the image set.
+		lastError = PCO_SetTriggerMode(camera, TRIGGER_MODE_SOFTWARETRIGGER);
 		if (lastError == PCO_NOERROR)
 			lastError = PCO_SetAcquireMode(camera, 0x0000); // Ignore acquire-enable input.
 		if (lastError == PCO_NOERROR)
@@ -396,8 +400,16 @@ namespace forms2 {
 
 		recording = true;
 		framePending = false;
+		waitingForExternalStart = false;
+		externalStartSawLow = false;
+		softwareTriggerIssued = false;
 		getSettings();
 		return 0;
+	}
+
+	void PixelflyUsbDriver::beginImageSet() {
+		waitingForExternalStart = externalStart;
+		externalStartSawLow = false;
 	}
 
 	void PixelflyUsbDriver::expose() {
@@ -412,11 +424,17 @@ namespace forms2 {
 		if (lastError != PCO_NOERROR)
 			return;
 
-		WORD triggered = 0;
-		lastError = PCO_ForceTrigger(camera, &triggered);
-		if (lastError == PCO_NOERROR && triggered == 0)
-			lastError = PCO_ERROR_APPLICATION;
-		framePending = (lastError == PCO_NOERROR);
+		framePending = true;
+		softwareTriggerIssued = false;
+		if (!waitingForExternalStart) {
+			WORD triggered = 0;
+			lastError = PCO_ForceTrigger(camera, &triggered);
+			if (lastError == PCO_NOERROR && triggered == 0)
+				lastError = PCO_ERROR_APPLICATION;
+			softwareTriggerIssued = (lastError == PCO_NOERROR);
+		}
+		if (lastError != PCO_NOERROR)
+			framePending = false;
 	}
 
 	int PixelflyUsbDriver::getImageStatus() {
@@ -424,6 +442,33 @@ namespace forms2 {
 			return IMAGE_ERROR;
 		if (!framePending)
 			return CAMERA_IDLE;
+
+		if (waitingForExternalStart) {
+			WORD triggerSignal = 1; // PCO reports 1 for low and 0 for high.
+			lastError = PCO_GetExpTrigSignalStatus(camera, &triggerSignal);
+			if (lastError != PCO_NOERROR)
+				return IMAGE_ERROR;
+			if (triggerSignal != 0) {
+				externalStartSawLow = true;
+				return CAMERA_BUSY;
+			}
+			// Require a low-to-high transition so a stale high level cannot start
+			// more than one image set during repeated acquisition.
+			if (!externalStartSawLow)
+				return CAMERA_BUSY;
+
+			waitingForExternalStart = false;
+			WORD triggered = 0;
+			lastError = PCO_ForceTrigger(camera, &triggered);
+			if (lastError == PCO_NOERROR && triggered == 0)
+				lastError = PCO_ERROR_APPLICATION;
+			if (lastError != PCO_NOERROR)
+				return IMAGE_ERROR;
+			softwareTriggerIssued = true;
+		}
+
+		if (!softwareTriggerIssued)
+			return CAMERA_BUSY;
 
 		DWORD waitResult = WaitForSingleObject(bufferEvent, 0);
 		if (waitResult == WAIT_TIMEOUT)
@@ -458,6 +503,7 @@ namespace forms2 {
 			return;
 		std::memcpy(buffer, cameraBuffer, bufferBytes);
 		framePending = false;
+		softwareTriggerIssued = false;
 		ResetEvent(bufferEvent);
 	}
 
@@ -473,6 +519,9 @@ namespace forms2 {
 			PCO_SetRecordingState(camera, 0x0000);
 		recording = false;
 		framePending = false;
+		waitingForExternalStart = false;
+		externalStartSawLow = false;
+		softwareTriggerIssued = false;
 	}
 
 	int PixelflyUsbDriver::getRows() {

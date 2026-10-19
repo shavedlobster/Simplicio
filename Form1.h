@@ -67,6 +67,8 @@ namespace forms2{
 	private: System::Windows::Forms::Label^  formatLabel;
 
 	private: System::Windows::Forms::ListBox^  formatListBox;
+	private: System::Windows::Forms::ListBox^  triggerBox;
+	private: System::Windows::Forms::Label^  triggerLabel;
 	private: System::Windows::Forms::Button^  initButton;
 	private: System::Windows::Forms::PictureBox^  pictureBox;
 	private: System::Windows::Forms::ListBox^  prevListBox;
@@ -91,6 +93,9 @@ namespace forms2{
 	private: System::Windows::Forms::TextBox^  serverNameBox;
 	private: System::Windows::Forms::Label^  label1;
 	private: System::Windows::Forms::Label^  currentServerNameLabel;
+#ifdef _DEBUG
+	private: System::Windows::Forms::Button^  ciceroMetadataTestButton;
+#endif
 
 
 
@@ -124,6 +129,8 @@ namespace forms2{
 			this->saveLabel = (gcnew System::Windows::Forms::Label());
 			this->formatLabel = (gcnew System::Windows::Forms::Label());
 			this->formatListBox = (gcnew System::Windows::Forms::ListBox());
+			this->triggerLabel = (gcnew System::Windows::Forms::Label());
+			this->triggerBox = (gcnew System::Windows::Forms::ListBox());
 			this->initButton = (gcnew System::Windows::Forms::Button());
 			this->pictureBox = (gcnew System::Windows::Forms::PictureBox());
 			this->prevListBox = (gcnew System::Windows::Forms::ListBox());
@@ -278,6 +285,27 @@ namespace forms2{
 			this->formatListBox->Size = System::Drawing::Size(136, 17);
 			this->formatListBox->TabIndex = 13;
 			// 
+			// triggerLabel
+			//
+			this->triggerLabel->AutoSize = true;
+			this->triggerLabel->Location = System::Drawing::Point(15, 86);
+			this->triggerLabel->Name = L"triggerLabel";
+			this->triggerLabel->Size = System::Drawing::Size(43, 13);
+			this->triggerLabel->TabIndex = 34;
+			this->triggerLabel->Text = L"Trigger:";
+			//
+			// triggerBox
+			//
+			this->triggerBox->ColumnWidth = 65;
+			this->triggerBox->FormattingEnabled = true;
+			this->triggerBox->Items->AddRange(gcnew cli::array< System::Object^ >(2) {L"Internal", L"Ext Start"});
+			this->triggerBox->Location = System::Drawing::Point(82, 86);
+			this->triggerBox->MultiColumn = true;
+			this->triggerBox->Name = L"triggerBox";
+			this->triggerBox->Size = System::Drawing::Size(136, 17);
+			this->triggerBox->TabIndex = 35;
+			this->triggerBox->SelectedIndex = 0;
+			//
 			// initButton
 			// 
 			this->initButton->Location = System::Drawing::Point(61, 107);
@@ -519,6 +547,8 @@ namespace forms2{
 			this->Controls->Add(this->initButton);
 			this->Controls->Add(this->formatListBox);
 			this->Controls->Add(this->formatLabel);
+			this->Controls->Add(this->triggerBox);
+			this->Controls->Add(this->triggerLabel);
 			this->Controls->Add(this->saveLabel);
 			this->Controls->Add(this->interruptButton);
 			this->Controls->Add(this->imageProgressBar);
@@ -611,6 +641,10 @@ namespace forms2{
 		int getHistoryIndex(int stepsBack);
 		void saveImage(int stepsBack);
 		void resize();
+#ifdef _DEBUG
+		void initializeCiceroMetadataTestButton();
+		System::Void ciceroMetadataTestButton_Click(System::Object^ sender, System::EventArgs^ e);
+#endif
 	//	void processNewImage(Object^ imgObj);
 	//	void drawBuffers(int stepsBack);
 		//listBoxNumers(int start,int stop);

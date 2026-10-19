@@ -18,6 +18,9 @@ namespace forms2{
 		virtual int getImageHeight()=0;
 		virtual void readImage(UInt16 *buffer)=0;
 		virtual int armCamera()=0;
+		virtual void beginImageSet(){}
+		virtual void setExternalStart(bool enabled){}
+		virtual bool supportsExternalStart(){return false;}
 		virtual String^ getDriverName()=0;
 		//String^ getCameraName(){return new String(cameraName);}
 

@@ -2,7 +2,7 @@
 
 ## Scope of this milestone
 
-This version adds the camera to Simplicio's **Camera Type** list and implements one-frame acquisition through the installed PCO SDK. It does not yet add exposure controls, external triggering, four-frame acquisition, or preview formulas.
+The Pixelfly adapter supports camera selection, exposure and sensor-area settings, binning, multi-exposure AIA capture, and internal or external triggering through the installed PCO SDK. Preview formulas remain a later milestone.
 
 ## Installed software used by this build
 
@@ -57,3 +57,16 @@ If selection fails, the adapter shows the PCO SDK error number and description. 
 `PCO_OpenCamera` → camera type/description queries → `PCO_SetTriggerMode` → `PCO_SetAcquireMode` → `PCO_ArmCamera` → `PCO_GetSizes` → `PCO_AllocateBuffer` → `PCO_SetImageParameters` → `PCO_SetRecordingState` → `PCO_AddBufferEx` → `PCO_ForceTrigger` → wait/check buffer → copy pixels → cancel/stop/free/close
 
 The adapter does not reset the camera to defaults. For this milestone it uses settings already present in the camera and changes trigger/acquire state only when arming.
+
+## External-start acquisition
+
+The **Trigger** selector has two modes:
+
+- **Internal** arms the Pixelfly in PCO software-trigger mode. Simplicio calls `PCO_ForceTrigger` once for every requested exposure.
+- **Ext Start** also arms the Pixelfly in software-trigger mode, but waits for one low-to-high transition on the camera's exposure-trigger input before starting an image set. After that start event, Simplicio calls `PCO_ForceTrigger` once for each exposure selected in **Exposures per image**.
+
+Choose the trigger mode before acquisition starts. The selector is locked during acquisition and re-enabled afterward. With **Exposures per image** set to 4, one valid external-start event begins a four-exposure image set. **Acquire Repeatedly** requires one new low-to-high start transition for each complete image set. **Interrupt Acquisition** cancels a run that is waiting for the start event.
+
+Use only a trigger signal compatible with the camera hardware and the electrical requirements in the pco.pixelfly manual. The software mode selection does not validate the voltage, polarity, or wiring at the camera connector.
+
+The implementation was adapted from `insommer/Simplicio` commits `036c385` and `07dfbf3`. The lab UI describes this behavior as `Ext Start`. The local implementation keeps per-camera state and performs nonblocking signal polling so **Interrupt Acquisition** remains responsive while it waits.
