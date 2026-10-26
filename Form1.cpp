@@ -252,6 +252,9 @@ namespace forms2{
 		analysisQueueEvent=gcnew AutoResetEvent(false);
 		analysisStopping=false;
 		currentAnalysisProcess=nullptr;
+		analysisPreviewForm=nullptr;
+		analysisPreviewPictureBox=nullptr;
+		analysisPreviewPathLabel=nullptr;
 		loadAnalysisSettings();
 		analysisWorker=gcnew Thread(gcnew ThreadStart(this,&Form1::analysisWorkerLoop));
 		analysisWorker->IsBackground=true;
@@ -336,6 +339,7 @@ namespace forms2{
 			if(exitCode==0){
 				if(File::Exists(errorPath)) File::Delete(errorPath);
 				setAnalysisStatus(String::Format("Analysis complete: {0}",stem));
+				showAnalysisPreview(previewPath);
 			}else{
 				File::WriteAllText(errorPath,standardError);
 				setAnalysisStatus(String::Format("Analysis failed ({0}): {1}",exitCode,stem));
@@ -361,6 +365,79 @@ namespace forms2{
 			return;
 		}
 		analysisStatusLabel->Text=status;
+	}
+
+	void Form1::showAnalysisPreview(String^ previewPath){
+		if(this->IsDisposed || this->Disposing) return;
+		if(this->InvokeRequired){
+			try{ this->BeginInvoke(gcnew Action<String^>(this,&Form1::showAnalysisPreview),previewPath); }
+			catch(Exception^){ }
+			return;
+		}
+
+		try{
+			if(!File::Exists(previewPath)){
+				setAnalysisStatus(String::Format("Preview file not found: {0}",previewPath));
+				return;
+			}
+
+			FileStream^ stream=File::Open(previewPath,FileMode::Open,FileAccess::Read,FileShare::ReadWrite);
+			Image^ source=nullptr;
+			Bitmap^ replacement=nullptr;
+			try{
+				source=Image::FromStream(stream);
+				replacement=gcnew Bitmap(source);
+			}finally{
+				if(source!=nullptr) delete source;
+				stream->Close();
+			}
+
+			if(analysisPreviewForm==nullptr || analysisPreviewForm->IsDisposed){
+				analysisPreviewForm=gcnew Form();
+				analysisPreviewForm->Text="Simplicio Analysis Preview";
+				analysisPreviewForm->StartPosition=FormStartPosition::CenterParent;
+				analysisPreviewForm->ClientSize=System::Drawing::Size(1000,720);
+				analysisPreviewForm->FormClosed+=gcnew FormClosedEventHandler(
+					this,&Form1::analysisPreviewFormClosed);
+
+				analysisPreviewPictureBox=gcnew PictureBox();
+				analysisPreviewPictureBox->Dock=DockStyle::Fill;
+				analysisPreviewPictureBox->BackColor=Color::Black;
+				analysisPreviewPictureBox->SizeMode=PictureBoxSizeMode::Zoom;
+				analysisPreviewForm->Controls->Add(analysisPreviewPictureBox);
+
+				analysisPreviewPathLabel=gcnew Label();
+				analysisPreviewPathLabel->Dock=DockStyle::Bottom;
+				analysisPreviewPathLabel->Height=36;
+				analysisPreviewPathLabel->Padding=System::Windows::Forms::Padding(8);
+				analysisPreviewPathLabel->AutoEllipsis=true;
+				analysisPreviewForm->Controls->Add(analysisPreviewPathLabel);
+			}
+
+			Image^ previous=analysisPreviewPictureBox->Image;
+			analysisPreviewPictureBox->Image=replacement;
+			if(previous!=nullptr) delete previous;
+			analysisPreviewPathLabel->Text=previewPath;
+			analysisPreviewPathLabel->AccessibleDescription=previewPath;
+
+			if(!analysisPreviewForm->Visible)
+				analysisPreviewForm->Show(this);
+			else if(analysisPreviewForm->WindowState==FormWindowState::Minimized)
+				analysisPreviewForm->WindowState=FormWindowState::Normal;
+			analysisPreviewForm->BringToFront();
+		}catch(Exception^ ex){
+			setAnalysisStatus(String::Format("Preview error: {0}",ex->Message));
+		}
+	}
+
+	System::Void Form1::analysisPreviewFormClosed(System::Object^ sender, System::Windows::Forms::FormClosedEventArgs^ e){
+		if(analysisPreviewPictureBox!=nullptr && analysisPreviewPictureBox->Image!=nullptr){
+			delete analysisPreviewPictureBox->Image;
+			analysisPreviewPictureBox->Image=nullptr;
+		}
+		analysisPreviewForm=nullptr;
+		analysisPreviewPictureBox=nullptr;
+		analysisPreviewPathLabel=nullptr;
 	}
 
 	System::Void Form1::autoAnalyzeCheckBox_CheckedChanged(System::Object^ sender, System::EventArgs^ e){

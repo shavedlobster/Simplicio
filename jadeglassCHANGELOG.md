@@ -521,6 +521,29 @@ These changes are local to the `shavedlobster/Simplicio` fork checkout on the
 - Physical validation on the lab computer remains necessary to confirm the
   chosen imaging axis, binning, ROI, and Pixelfly optical calibration.
 
+## 2026-10-26 — Show the latest analysis preview inside Simplicio
+
+These changes are local to the `shavedlobster/Simplicio` fork checkout on the
+`vs2026` branch. They have not been pushed.
+
+### Changed
+
+- Simplicio opens a non-modal `Simplicio Analysis Preview` window when Python
+  finishes analyzing the first saved AIA capture.
+- The window displays the generated preview PNG with aspect-ratio-preserving
+  zoom and shows its full path along the bottom.
+- Later captures update the existing window instead of opening additional
+  windows. If the user closes it, the next successful capture reopens it.
+- Image files are copied into memory before display, so the preview does not
+  remain locked on disk and can be replaced or deleted normally.
+- The preview window is owned by the main Simplicio form and does not block
+  camera controls or acquisition.
+
+### Validation
+
+- Built the complete Simplicio solution successfully as `Release|x64` with
+  Visual Studio 18 MSBuild after adding the preview window.
+
 ## 2026-10-15 — Validate a physical four-exposure Pixelfly AIA file
 
 This was a validation-only step. No C++ acquisition or AIA-writing code was changed.

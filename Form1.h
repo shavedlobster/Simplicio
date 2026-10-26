@@ -652,6 +652,9 @@ namespace forms2{
 		System::Windows::Forms::ComboBox^ analysisAxisComboBox;
 		System::Windows::Forms::NumericUpDown^ analysisBinningBox;
 		System::Windows::Forms::TextBox^ analysisRoiTextBox;
+		System::Windows::Forms::Form^ analysisPreviewForm;
+		System::Windows::Forms::PictureBox^ analysisPreviewPictureBox;
+		System::Windows::Forms::Label^ analysisPreviewPathLabel;
 		//UInt16 layers;
 		//CameraSettings camSet;
 		CameraThread^ camThread;
@@ -706,6 +709,7 @@ namespace forms2{
 		void analysisWorkerLoop();
 		void runAnalysis(String^ aiaPath);
 		void setAnalysisStatus(String^ status);
+		void showAnalysisPreview(String^ previewPath);
 		String^ quoteProcessArgument(String^ value);
 		bool parseAnalysisRoi(String^ value, array<int>^% roi);
 #ifdef _DEBUG
@@ -736,6 +740,7 @@ namespace forms2{
 		System::Void analysisSetupButton_Click(System::Object^ sender, System::EventArgs^ e);
 		System::Void analysisPythonBrowse_Click(System::Object^ sender, System::EventArgs^ e);
 		System::Void analysisScriptBrowse_Click(System::Object^ sender, System::EventArgs^ e);
+		System::Void analysisPreviewFormClosed(System::Object^ sender, System::Windows::Forms::FormClosedEventArgs^ e);
 		System::Void Form1_ResizeEnd(System::Object^  sender, System::EventArgs^  e) {resize();}
 private: System::Void folderBrowserDialog_HelpRequest(System::Object^  sender, System::EventArgs^  e) {
 		 }
