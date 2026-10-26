@@ -28,6 +28,7 @@ namespace forms2{
 		DateTime getDateTime(){return dateTime;}
 		bool isDouble(){return (dbl==2);}
 		bool getSaved(){return saved;}
+		String^ getSavedPath(){return savedPath;}
 
 		String^ getDateTimeString();
 		UInt16 getMaxValue(int layer, int frame);
@@ -45,6 +46,7 @@ namespace forms2{
 		int length;
 		int dbl;
 		bool saved;
+		String^ savedPath;
 		bool singleFrame;
 		DateTime dateTime;//time and date when this ImageData object was created
 

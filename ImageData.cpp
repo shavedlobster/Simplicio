@@ -14,6 +14,7 @@ namespace forms2{
 		for (int i=0; i<length;i++)
 			imageBuffer[i] = b[i];
 		saved = false;
+		savedPath = String::Empty;
 		seqVars = gcnew LinkedList<Variable^>();
 		
 	}
@@ -56,6 +57,7 @@ namespace forms2{
 	void ImageData::saveFile(String^ filePath)
 	{	//saves a 16-bit AIA file in little endian
 		saved=false;
+		savedPath=String::Empty;
 		try{
 			if (String::IsNullOrWhiteSpace(filePath) || !Directory::Exists(filePath))
 				throw gcnew DirectoryNotFoundException(String::Format("The save folder does not exist: {0}",filePath));
@@ -101,6 +103,7 @@ namespace forms2{
 					bw->Write((Double)var->VariableValue);
 				}
 				saved=true;
+				savedPath=filename;
 			}
 			finally{
 				if (bw!=nullptr)

@@ -465,6 +465,62 @@ These changes are local to the `shavedlobster/Simplicio` fork checkout. No C++ a
 - Capture a real four-exposure Pixelfly AIA set and run it through the complete analysis workflow.
 - Add a Pixelfly/AIA branch to the analysis repository if Pixelfly should be selectable from `Analyze_Atom_Pictures.py` rather than loaded directly in Python.
 
+## 2026-10-26 — Integrate automatic Python analysis into Simplicio
+
+These changes are local to the `shavedlobster/Simplicio` fork checkout on the
+`vs2026` branch. They have not been pushed.
+
+### User-visible behavior
+
+- Added an `Analyze saved images` checkbox to the Image Preview box.
+- Added an `Analysis Setup` dialog for choosing the lab computer's Python
+  executable, `AnalysisCodeNew/Applications/Analyze_Pixelfly_AIA.py`, imaging
+  axis, camera binning, and optional analysis ROI.
+- Added a status line showing whether analysis is off, waiting, queued,
+  running, complete, or failed.
+- Settings persist per Windows user in
+  `%APPDATA%/Simplicio/pixelfly-analysis.settings`.
+
+### Acquisition and analysis flow
+
+- `ImageData` now records the final path of a successfully saved AIA file.
+- Both automatic acquisition saves and the manual `Save Image Data` action
+  enqueue that completed path when automatic analysis is enabled.
+- A single background worker launches the configured Python analysis process,
+  keeping the Windows Forms interface responsive and processing captures in
+  order rather than launching competing fits.
+- Each capture writes `<timestamp>_analysis.csv` and
+  `<timestamp>_preview.png` into an `analysis` subfolder beside the AIA file.
+- Analysis errors do not stop acquisition. Process-launch exceptions are
+  written to a per-capture `_analysis_error.txt` file and shown in the status
+  line.
+- Python standard-error output is captured into that error file when the
+  analyzer exits unsuccessfully, so failures remain diagnosable without a
+  console window on the lab computer.
+- Closing Simplicio stops its background analysis worker and terminates an
+  active child analysis process.
+
+### External dependency
+
+- The lab computer must have Python and the local AnalysisCodeNew checkout
+  containing the Pixelfly AIA analysis changes. Simplicio stores those paths
+  through the setup dialog; no developer-machine path is compiled into the
+  application.
+
+### Documentation and validation
+
+- Added `AUTO_ANALYSIS_SETUP.md` with lab-computer installation,
+  configuration, and output instructions.
+- Built the complete Simplicio solution successfully as `Release|x64` using
+  Visual Studio 18 MSBuild. The existing Debug executable was open, so its
+  linker could not replace that running file; C++ compilation completed
+  before that Debug-only linker failure.
+- Ran the exact Python command Simplicio launches against
+  `C:\New folder\2026-10-26-12;27;55.aia`; it produced both a fitted CSV and a
+  non-interactive PNG preview successfully.
+- Physical validation on the lab computer remains necessary to confirm the
+  chosen imaging axis, binning, ROI, and Pixelfly optical calibration.
+
 ## 2026-10-15 — Validate a physical four-exposure Pixelfly AIA file
 
 This was a validation-only step. No C++ acquisition or AIA-writing code was changed.

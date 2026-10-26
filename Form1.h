@@ -85,6 +85,9 @@ namespace forms2{
 	private: System::Windows::Forms::Label^  zoomLabel2;
 	private: System::Windows::Forms::CheckBox^  saveCheckBox;
 	private: System::Windows::Forms::Button^  saveButton;
+	private: System::Windows::Forms::CheckBox^ autoAnalyzeCheckBox;
+	private: System::Windows::Forms::Button^ analysisSetupButton;
+	private: System::Windows::Forms::Label^ analysisStatusLabel;
 	private: System::Windows::Forms::LinkLabel^  folderLabel;
 	private: System::Windows::Forms::Label^  cameraLabel;
 	private: System::Windows::Forms::ListBox^  cameraListBox;
@@ -141,6 +144,9 @@ namespace forms2{
 			this->zoomLabel = (gcnew System::Windows::Forms::Label());
 			this->previewGroup = (gcnew System::Windows::Forms::GroupBox());
 			this->saveButton = (gcnew System::Windows::Forms::Button());
+			this->autoAnalyzeCheckBox = (gcnew System::Windows::Forms::CheckBox());
+			this->analysisSetupButton = (gcnew System::Windows::Forms::Button());
+			this->analysisStatusLabel = (gcnew System::Windows::Forms::Label());
 			this->zoomLabel2 = (gcnew System::Windows::Forms::Label());
 			this->pixelSizeLabel = (gcnew System::Windows::Forms::Label());
 			this->pixelSizeBox = (gcnew System::Windows::Forms::NumericUpDown());
@@ -387,6 +393,9 @@ namespace forms2{
 			// previewGroup
 			// 
 			this->previewGroup->Controls->Add(this->saveButton);
+			this->previewGroup->Controls->Add(this->autoAnalyzeCheckBox);
+			this->previewGroup->Controls->Add(this->analysisSetupButton);
+			this->previewGroup->Controls->Add(this->analysisStatusLabel);
 			this->previewGroup->Controls->Add(this->zoomLabel2);
 			this->previewGroup->Controls->Add(this->pixelSizeLabel);
 			this->previewGroup->Controls->Add(this->pixelSizeBox);
@@ -396,7 +405,7 @@ namespace forms2{
 			this->previewGroup->Controls->Add(this->frameListBox);
 			this->previewGroup->Location = System::Drawing::Point(42, 533);
 			this->previewGroup->Name = L"previewGroup";
-			this->previewGroup->Size = System::Drawing::Size(280, 274);
+			this->previewGroup->Size = System::Drawing::Size(280, 290);
 			this->previewGroup->TabIndex = 23;
 			this->previewGroup->TabStop = false;
 			this->previewGroup->Text = L"Image Preview";
@@ -410,6 +419,36 @@ namespace forms2{
 			this->saveButton->Text = L"Save Image Data";
 			this->saveButton->UseVisualStyleBackColor = true;
 			this->saveButton->Click += gcnew System::EventHandler(this, &Form1::saveButton_Click);
+			// 
+			// autoAnalyzeCheckBox
+			// 
+			this->autoAnalyzeCheckBox->AutoSize = true;
+			this->autoAnalyzeCheckBox->Location = System::Drawing::Point(19, 204);
+			this->autoAnalyzeCheckBox->Name = L"autoAnalyzeCheckBox";
+			this->autoAnalyzeCheckBox->Size = System::Drawing::Size(130, 17);
+			this->autoAnalyzeCheckBox->TabIndex = 27;
+			this->autoAnalyzeCheckBox->Text = L"Analyze saved images";
+			this->autoAnalyzeCheckBox->UseVisualStyleBackColor = true;
+			this->autoAnalyzeCheckBox->CheckedChanged += gcnew System::EventHandler(this, &Form1::autoAnalyzeCheckBox_CheckedChanged);
+			// 
+			// analysisSetupButton
+			// 
+			this->analysisSetupButton->Location = System::Drawing::Point(19, 227);
+			this->analysisSetupButton->Name = L"analysisSetupButton";
+			this->analysisSetupButton->Size = System::Drawing::Size(110, 23);
+			this->analysisSetupButton->TabIndex = 28;
+			this->analysisSetupButton->Text = L"Analysis Setup";
+			this->analysisSetupButton->UseVisualStyleBackColor = true;
+			this->analysisSetupButton->Click += gcnew System::EventHandler(this, &Form1::analysisSetupButton_Click);
+			// 
+			// analysisStatusLabel
+			// 
+			this->analysisStatusLabel->AutoEllipsis = true;
+			this->analysisStatusLabel->Location = System::Drawing::Point(19, 255);
+			this->analysisStatusLabel->Name = L"analysisStatusLabel";
+			this->analysisStatusLabel->Size = System::Drawing::Size(240, 26);
+			this->analysisStatusLabel->TabIndex = 29;
+			this->analysisStatusLabel->Text = L"Analysis: off";
 			// 
 			// zoomLabel2
 			// 
@@ -597,6 +636,22 @@ namespace forms2{
 		bool interruptImageLoop;
 		String^ filePath;
 		String^ savePath;
+		String^ analysisPythonPath;
+		String^ analysisScriptPath;
+		String^ analysisAxis;
+		int analysisBinning;
+		array<int>^ analysisRoi;
+		System::Collections::Generic::Queue<String^>^ analysisQueue;
+		Object^ analysisQueueLock;
+		System::Threading::AutoResetEvent^ analysisQueueEvent;
+		System::Threading::Thread^ analysisWorker;
+		System::Diagnostics::Process^ currentAnalysisProcess;
+		bool analysisStopping;
+		System::Windows::Forms::TextBox^ analysisPythonTextBox;
+		System::Windows::Forms::TextBox^ analysisScriptTextBox;
+		System::Windows::Forms::ComboBox^ analysisAxisComboBox;
+		System::Windows::Forms::NumericUpDown^ analysisBinningBox;
+		System::Windows::Forms::TextBox^ analysisRoiTextBox;
 		//UInt16 layers;
 		//CameraSettings camSet;
 		CameraThread^ camThread;
@@ -641,6 +696,18 @@ namespace forms2{
 		int getHistoryIndex(int stepsBack);
 		void saveImage(int stepsBack);
 		void resize();
+		void initializeAnalysis();
+		void stopAnalysis();
+		void loadAnalysisSettings();
+		void saveAnalysisSettings();
+		String^ getAnalysisSettingsPath();
+		bool validateAnalysisSettings(bool showMessage);
+		void enqueueAnalysis(String^ aiaPath);
+		void analysisWorkerLoop();
+		void runAnalysis(String^ aiaPath);
+		void setAnalysisStatus(String^ status);
+		String^ quoteProcessArgument(String^ value);
+		bool parseAnalysisRoi(String^ value, array<int>^% roi);
 #ifdef _DEBUG
 		void initializeCiceroMetadataTestButton();
 		System::Void ciceroMetadataTestButton_Click(System::Object^ sender, System::EventArgs^ e);
@@ -665,6 +732,10 @@ namespace forms2{
 		}
 		System::Void saveCheckBox_CheckedChanged(System::Object^  sender, System::EventArgs^  e) {setSaveData(saveCheckBox->Checked);}
 		System::Void saveButton_Click(System::Object^  sender, System::EventArgs^  e) {saveImage(prevListBox->SelectedIndex);}
+		System::Void autoAnalyzeCheckBox_CheckedChanged(System::Object^ sender, System::EventArgs^ e);
+		System::Void analysisSetupButton_Click(System::Object^ sender, System::EventArgs^ e);
+		System::Void analysisPythonBrowse_Click(System::Object^ sender, System::EventArgs^ e);
+		System::Void analysisScriptBrowse_Click(System::Object^ sender, System::EventArgs^ e);
 		System::Void Form1_ResizeEnd(System::Object^  sender, System::EventArgs^  e) {resize();}
 private: System::Void folderBrowserDialog_HelpRequest(System::Object^  sender, System::EventArgs^  e) {
 		 }

@@ -13,6 +13,8 @@
 
 namespace forms2{
 	using namespace System::IO;
+	using namespace System::Diagnostics;
+	using namespace System::Text;
 	void Form1::InitProgram()
 	{	//list with "none" then add times
 		//cameraInited = false;
@@ -49,6 +51,7 @@ namespace forms2{
 		displayedLayer = 0;
 		savePath = String::Empty;
 		folderLabel->Text = "Click to select save folder";
+		initializeAnalysis();
 		
 		//imgData = nullptr;
 		//imgDataStack = gcnew Stack(10);
@@ -160,10 +163,369 @@ namespace forms2{
 		}
 		camThread->setSave(savedata);
 	}
+
+	String^ Form1::getAnalysisSettingsPath(){
+		String^ folder = Path::Combine(
+			Environment::GetFolderPath(Environment::SpecialFolder::ApplicationData),
+			"Simplicio");
+		Directory::CreateDirectory(folder);
+		return Path::Combine(folder,"pixelfly-analysis.settings");
+	}
+
+	void Form1::loadAnalysisSettings(){
+		analysisPythonPath = "python";
+		analysisScriptPath = Environment::GetEnvironmentVariable("SIMPLICIO_ANALYSIS_SCRIPT");
+		if (analysisScriptPath==nullptr) analysisScriptPath=String::Empty;
+		analysisAxis = "side";
+		analysisBinning = 1;
+		analysisRoi = nullptr;
+
+		String^ settingsPath = getAnalysisSettingsPath();
+		if (!File::Exists(settingsPath)) return;
+
+		for each(String^ line in File::ReadAllLines(settingsPath)){
+			int separator = line->IndexOf('=');
+			if (separator<1) continue;
+			String^ key = line->Substring(0,separator)->Trim();
+			String^ value = line->Substring(separator+1)->Trim();
+			if (key->Equals("Python",StringComparison::OrdinalIgnoreCase))
+				analysisPythonPath=value;
+			else if (key->Equals("Script",StringComparison::OrdinalIgnoreCase))
+				analysisScriptPath=value;
+			else if (key->Equals("Axis",StringComparison::OrdinalIgnoreCase) &&
+				(value=="side" || value=="top"))
+				analysisAxis=value;
+			else if (key->Equals("Binning",StringComparison::OrdinalIgnoreCase)){
+				int parsed;
+				if (Int32::TryParse(value,parsed) && parsed>0) analysisBinning=parsed;
+			}else if (key->Equals("ROI",StringComparison::OrdinalIgnoreCase)){
+				array<int>^ parsedRoi;
+				if (parseAnalysisRoi(value,parsedRoi)) analysisRoi=parsedRoi;
+			}
+		}
+	}
+
+	void Form1::saveAnalysisSettings(){
+		array<String^>^ lines = gcnew array<String^>{
+			String::Concat("Python=",analysisPythonPath),
+			String::Concat("Script=",analysisScriptPath),
+			String::Concat("Axis=",analysisAxis),
+			String::Format("Binning={0}",analysisBinning),
+			analysisRoi==nullptr ? "ROI=" : String::Format(
+				"ROI={0},{1},{2},{3}",analysisRoi[0],analysisRoi[1],analysisRoi[2],analysisRoi[3])
+		};
+		File::WriteAllLines(getAnalysisSettingsPath(),lines);
+	}
+
+	bool Form1::parseAnalysisRoi(String^ value, array<int>^% roi){
+		roi=nullptr;
+		if (String::IsNullOrWhiteSpace(value)) return true;
+		array<String^>^ pieces=value->Split(gcnew array<wchar_t>{',',' ',';'},
+			StringSplitOptions::RemoveEmptyEntries);
+		if (pieces->Length!=4) return false;
+		array<int>^ parsed=gcnew array<int>(4);
+		for(int i=0;i<4;i++)
+			if(!Int32::TryParse(pieces[i],parsed[i])) return false;
+		if(parsed[0]<0 || parsed[2]<0 || parsed[1]<=parsed[0] || parsed[3]<=parsed[2])
+			return false;
+		roi=parsed;
+		return true;
+	}
+
+	bool Form1::validateAnalysisSettings(bool showMessage){
+		String^ problem=nullptr;
+		if(String::IsNullOrWhiteSpace(analysisPythonPath))
+			problem="Select the Python executable used for AnalysisCodeNew.";
+		else if(String::IsNullOrWhiteSpace(analysisScriptPath) || !File::Exists(analysisScriptPath))
+			problem="Select Applications\\Analyze_Pixelfly_AIA.py from the AnalysisCodeNew checkout.";
+		else if(analysisBinning<1)
+			problem="Analysis binning must be a positive integer.";
+
+		if(problem!=nullptr && showMessage)
+			MessageBox::Show(problem,"Pixelfly Analysis",MessageBoxButtons::OK,MessageBoxIcon::Information);
+		return problem==nullptr;
+	}
+
+	void Form1::initializeAnalysis(){
+		analysisQueue=gcnew System::Collections::Generic::Queue<String^>();
+		analysisQueueLock=gcnew Object();
+		analysisQueueEvent=gcnew AutoResetEvent(false);
+		analysisStopping=false;
+		currentAnalysisProcess=nullptr;
+		loadAnalysisSettings();
+		analysisWorker=gcnew Thread(gcnew ThreadStart(this,&Form1::analysisWorkerLoop));
+		analysisWorker->IsBackground=true;
+		analysisWorker->Name="Simplicio AIA analysis worker";
+		analysisWorker->Start();
+		setAnalysisStatus("Analysis: off");
+	}
+
+	void Form1::stopAnalysis(){
+		analysisStopping=true;
+		if(analysisQueueEvent!=nullptr) analysisQueueEvent->Set();
+		try{
+			if(currentAnalysisProcess!=nullptr && !currentAnalysisProcess->HasExited)
+				currentAnalysisProcess->Kill();
+		}catch(Exception^){ }
+		if(analysisWorker!=nullptr && analysisWorker->IsAlive)
+			analysisWorker->Join(1000);
+	}
+
+	void Form1::enqueueAnalysis(String^ aiaPath){
+		if(String::IsNullOrWhiteSpace(aiaPath) || !File::Exists(aiaPath)) return;
+		Monitor::Enter(analysisQueueLock);
+		try{ analysisQueue->Enqueue(aiaPath); }
+		finally{ Monitor::Exit(analysisQueueLock); }
+		setAnalysisStatus(String::Format("Analysis: queued ({0})",analysisQueue->Count));
+		analysisQueueEvent->Set();
+	}
+
+	String^ Form1::quoteProcessArgument(String^ value){
+		return String::Concat("\"",value->Replace("\"","\\\""),"\"");
+	}
+
+	void Form1::analysisWorkerLoop(){
+		while(!analysisStopping){
+			analysisQueueEvent->WaitOne();
+			while(!analysisStopping){
+				String^ aiaPath=nullptr;
+				Monitor::Enter(analysisQueueLock);
+				try{
+					if(analysisQueue->Count>0) aiaPath=analysisQueue->Dequeue();
+				}finally{ Monitor::Exit(analysisQueueLock); }
+				if(aiaPath==nullptr) break;
+				runAnalysis(aiaPath);
+			}
+		}
+	}
+
+	void Form1::runAnalysis(String^ aiaPath){
+		try{
+			setAnalysisStatus(String::Format("Analysis: {0}",Path::GetFileName(aiaPath)));
+			String^ outputFolder=Path::Combine(Path::GetDirectoryName(aiaPath),"analysis");
+			Directory::CreateDirectory(outputFolder);
+			String^ stem=Path::GetFileNameWithoutExtension(aiaPath);
+			String^ csvPath=Path::Combine(outputFolder,String::Concat(stem,"_analysis.csv"));
+			String^ previewPath=Path::Combine(outputFolder,String::Concat(stem,"_preview.png"));
+			String^ errorPath=Path::Combine(outputFolder,String::Concat(stem,"_analysis_error.txt"));
+
+			StringBuilder^ arguments=gcnew StringBuilder();
+			arguments->Append(quoteProcessArgument(analysisScriptPath));
+			arguments->Append(" ")->Append(quoteProcessArgument(aiaPath));
+			arguments->Append(" --axis ")->Append(analysisAxis);
+			arguments->Append(" --binning ")->Append(analysisBinning);
+			arguments->Append(" --output ")->Append(quoteProcessArgument(csvPath));
+			arguments->Append(" --preview ")->Append(quoteProcessArgument(previewPath));
+			if(analysisRoi!=nullptr)
+				arguments->AppendFormat(" --roi {0} {1} {2} {3}",
+					analysisRoi[0],analysisRoi[1],analysisRoi[2],analysisRoi[3]);
+
+			ProcessStartInfo^ start=gcnew ProcessStartInfo();
+			start->FileName=analysisPythonPath;
+			start->Arguments=arguments->ToString();
+			start->WorkingDirectory=Path::GetDirectoryName(analysisScriptPath);
+			start->UseShellExecute=false;
+			start->CreateNoWindow=true;
+			start->RedirectStandardError=true;
+			currentAnalysisProcess=Process::Start(start);
+			String^ standardError=currentAnalysisProcess->StandardError->ReadToEnd();
+			currentAnalysisProcess->WaitForExit();
+			int exitCode=currentAnalysisProcess->ExitCode;
+			currentAnalysisProcess->Close();
+			currentAnalysisProcess=nullptr;
+			if(exitCode==0){
+				if(File::Exists(errorPath)) File::Delete(errorPath);
+				setAnalysisStatus(String::Format("Analysis complete: {0}",stem));
+			}else{
+				File::WriteAllText(errorPath,standardError);
+				setAnalysisStatus(String::Format("Analysis failed ({0}): {1}",exitCode,stem));
+			}
+		}catch(Exception^ ex){
+			currentAnalysisProcess=nullptr;
+			try{
+				String^ outputFolder=Path::Combine(Path::GetDirectoryName(aiaPath),"analysis");
+				Directory::CreateDirectory(outputFolder);
+				String^ errorPath=Path::Combine(outputFolder,
+					String::Concat(Path::GetFileNameWithoutExtension(aiaPath),"_analysis_error.txt"));
+				File::WriteAllText(errorPath,ex->ToString());
+			}catch(Exception^){ }
+			setAnalysisStatus(String::Format("Analysis error: {0}",ex->Message));
+		}
+	}
+
+	void Form1::setAnalysisStatus(String^ status){
+		if(analysisStatusLabel==nullptr || analysisStatusLabel->IsDisposed) return;
+		if(analysisStatusLabel->InvokeRequired){
+			try{ analysisStatusLabel->BeginInvoke(gcnew Action<String^>(this,&Form1::setAnalysisStatus),status); }
+			catch(Exception^){ }
+			return;
+		}
+		analysisStatusLabel->Text=status;
+	}
+
+	System::Void Form1::autoAnalyzeCheckBox_CheckedChanged(System::Object^ sender, System::EventArgs^ e){
+		if(autoAnalyzeCheckBox->Checked){
+			if(!validateAnalysisSettings(false)){
+				analysisSetupButton_Click(sender,e);
+				if(!validateAnalysisSettings(false)){
+					autoAnalyzeCheckBox->Checked=false;
+					return;
+				}
+			}
+			setAnalysisStatus("Analysis: waiting for saved AIA files");
+		}else{
+			setAnalysisStatus("Analysis: off");
+		}
+	}
+
+	System::Void Form1::analysisPythonBrowse_Click(System::Object^ sender, System::EventArgs^ e){
+		OpenFileDialog^ dialog=gcnew OpenFileDialog();
+		dialog->Title="Select the Python executable";
+		dialog->Filter="Python executable (python.exe)|python.exe|Executable files (*.exe)|*.exe|All files (*.*)|*.*";
+		if(!String::IsNullOrWhiteSpace(analysisPythonTextBox->Text) && File::Exists(analysisPythonTextBox->Text)){
+			dialog->InitialDirectory=Path::GetDirectoryName(analysisPythonTextBox->Text);
+			dialog->FileName=Path::GetFileName(analysisPythonTextBox->Text);
+		}
+		if(dialog->ShowDialog(this)==System::Windows::Forms::DialogResult::OK)
+			analysisPythonTextBox->Text=dialog->FileName;
+	}
+
+	System::Void Form1::analysisScriptBrowse_Click(System::Object^ sender, System::EventArgs^ e){
+		OpenFileDialog^ dialog=gcnew OpenFileDialog();
+		dialog->Title="Select Analyze_Pixelfly_AIA.py";
+		dialog->Filter="Pixelfly analysis (Analyze_Pixelfly_AIA.py)|Analyze_Pixelfly_AIA.py|Python files (*.py)|*.py|All files (*.*)|*.*";
+		if(!String::IsNullOrWhiteSpace(analysisScriptTextBox->Text) && File::Exists(analysisScriptTextBox->Text)){
+			dialog->InitialDirectory=Path::GetDirectoryName(analysisScriptTextBox->Text);
+			dialog->FileName=Path::GetFileName(analysisScriptTextBox->Text);
+		}
+		if(dialog->ShowDialog(this)==System::Windows::Forms::DialogResult::OK)
+			analysisScriptTextBox->Text=dialog->FileName;
+	}
+
+	System::Void Form1::analysisSetupButton_Click(System::Object^ sender, System::EventArgs^ e){
+		Form^ dialog=gcnew Form();
+		dialog->Text="Pixelfly Analysis Setup";
+		dialog->FormBorderStyle=System::Windows::Forms::FormBorderStyle::FixedDialog;
+		dialog->StartPosition=FormStartPosition::CenterParent;
+		dialog->MinimizeBox=false;
+		dialog->MaximizeBox=false;
+		dialog->ClientSize=System::Drawing::Size(630,250);
+
+		Label^ pythonLabel=gcnew Label();
+		pythonLabel->Text="Python executable:";
+		pythonLabel->Location=Point(12,18);
+		pythonLabel->AutoSize=true;
+		dialog->Controls->Add(pythonLabel);
+		analysisPythonTextBox=gcnew TextBox();
+		analysisPythonTextBox->Text=analysisPythonPath;
+		analysisPythonTextBox->Location=Point(125,15);
+		analysisPythonTextBox->Size=System::Drawing::Size(410,20);
+		dialog->Controls->Add(analysisPythonTextBox);
+		Button^ pythonBrowse=gcnew Button();
+		pythonBrowse->Text="Browse...";
+		pythonBrowse->Location=Point(542,13);
+		pythonBrowse->Click+=gcnew EventHandler(this,&Form1::analysisPythonBrowse_Click);
+		dialog->Controls->Add(pythonBrowse);
+
+		Label^ scriptLabel=gcnew Label();
+		scriptLabel->Text="Analysis script:";
+		scriptLabel->Location=Point(12,54);
+		scriptLabel->AutoSize=true;
+		dialog->Controls->Add(scriptLabel);
+		analysisScriptTextBox=gcnew TextBox();
+		analysisScriptTextBox->Text=analysisScriptPath;
+		analysisScriptTextBox->Location=Point(125,51);
+		analysisScriptTextBox->Size=System::Drawing::Size(410,20);
+		dialog->Controls->Add(analysisScriptTextBox);
+		Button^ scriptBrowse=gcnew Button();
+		scriptBrowse->Text="Browse...";
+		scriptBrowse->Location=Point(542,49);
+		scriptBrowse->Click+=gcnew EventHandler(this,&Form1::analysisScriptBrowse_Click);
+		dialog->Controls->Add(scriptBrowse);
+
+		Label^ axisLabel=gcnew Label();
+		axisLabel->Text="Imaging axis:";
+		axisLabel->Location=Point(12,91);
+		axisLabel->AutoSize=true;
+		dialog->Controls->Add(axisLabel);
+		analysisAxisComboBox=gcnew ComboBox();
+		analysisAxisComboBox->DropDownStyle=ComboBoxStyle::DropDownList;
+		analysisAxisComboBox->Items->AddRange(gcnew array<Object^>{"side","top"});
+		analysisAxisComboBox->SelectedItem=analysisAxis;
+		if(analysisAxisComboBox->SelectedIndex<0) analysisAxisComboBox->SelectedIndex=0;
+		analysisAxisComboBox->Location=Point(125,87);
+		dialog->Controls->Add(analysisAxisComboBox);
+
+		Label^ binningLabel=gcnew Label();
+		binningLabel->Text="Camera binning:";
+		binningLabel->Location=Point(280,91);
+		binningLabel->AutoSize=true;
+		dialog->Controls->Add(binningLabel);
+		analysisBinningBox=gcnew NumericUpDown();
+		analysisBinningBox->Minimum=1;
+		analysisBinningBox->Maximum=64;
+		analysisBinningBox->Value=analysisBinning;
+		analysisBinningBox->Location=Point(380,87);
+		analysisBinningBox->Size=System::Drawing::Size(60,20);
+		dialog->Controls->Add(analysisBinningBox);
+
+		Label^ roiLabel=gcnew Label();
+		roiLabel->Text="ROI (row start, row end, column start, column end; blank for full image):";
+		roiLabel->Location=Point(12,127);
+		roiLabel->AutoSize=true;
+		dialog->Controls->Add(roiLabel);
+		analysisRoiTextBox=gcnew TextBox();
+		analysisRoiTextBox->Location=Point(12,148);
+		analysisRoiTextBox->Size=System::Drawing::Size(605,20);
+		if(analysisRoi!=nullptr)
+			analysisRoiTextBox->Text=String::Format("{0}, {1}, {2}, {3}",
+				analysisRoi[0],analysisRoi[1],analysisRoi[2],analysisRoi[3]);
+		dialog->Controls->Add(analysisRoiTextBox);
+
+		Label^ note=gcnew Label();
+		note->Text="Results and previews are written to an analysis subfolder beside the AIA file.";
+		note->Location=Point(12,177);
+		note->AutoSize=true;
+		dialog->Controls->Add(note);
+
+		Button^ ok=gcnew Button();
+		ok->Text="Save";
+		ok->DialogResult=System::Windows::Forms::DialogResult::OK;
+		ok->Location=Point(461,211);
+		dialog->Controls->Add(ok);
+		Button^ cancel=gcnew Button();
+		cancel->Text="Cancel";
+		cancel->DialogResult=System::Windows::Forms::DialogResult::Cancel;
+		cancel->Location=Point(542,211);
+		dialog->Controls->Add(cancel);
+		dialog->AcceptButton=ok;
+		dialog->CancelButton=cancel;
+
+		if(dialog->ShowDialog(this)==System::Windows::Forms::DialogResult::OK){
+			array<int>^ parsedRoi;
+			if(!parseAnalysisRoi(analysisRoiTextBox->Text,parsedRoi)){
+				MessageBox::Show("ROI must be blank or four integers with increasing start/end values.",
+					"Pixelfly Analysis",MessageBoxButtons::OK,MessageBoxIcon::Error);
+				return;
+			}
+			analysisPythonPath=analysisPythonTextBox->Text->Trim();
+			analysisScriptPath=analysisScriptTextBox->Text->Trim();
+			analysisAxis=analysisAxisComboBox->SelectedItem->ToString();
+			analysisBinning=(int)analysisBinningBox->Value;
+			analysisRoi=parsedRoi;
+			if(validateAnalysisSettings(true)){
+				saveAnalysisSettings();
+				setAnalysisStatus(autoAnalyzeCheckBox->Checked ?
+					"Analysis: waiting for saved AIA files" : "Analysis: configured (off)");
+			}
+		}
+	}
 	void Form1::addImageData(ImageData^ img){
 	//	Thread^ imgThread = gcnew Thread(gcnew ParameterizedThreadStart(this,&Form1::processNewImage));
 	//	imgThread->Start(img);
 		imgThread->processImage(img,saveCheckBox->Checked,(int)zoomBox->Value,(int)pixelSizeBox->Value);
+		if (img!=nullptr && img->getSaved() && autoAnalyzeCheckBox->Checked)
+			enqueueAnalysis(img->getSavedPath());
 	}
 	void Form1::addBuffers(array<BufferedGraphics^>^ newbuffers, int numbuffers,ImageData^ img){
 		//called by imageThread after it processes a new image 
@@ -287,6 +649,8 @@ namespace forms2{
 		if (imgDataArray[bInd]==nullptr) return;
 		if (String::IsNullOrWhiteSpace(savePath) && !changePath()) return;
 		imgDataArray[bInd]->saveFile(getSavePath());
+		if (imgDataArray[bInd]->getSaved() && autoAnalyzeCheckBox->Checked)
+			enqueueAnalysis(imgDataArray[bInd]->getSavedPath());
 		setDisplayImage(displayedImgInd,displayedLayer);//updates the save button
 	}
 	int Form1::getHistoryIndex(int stepsBack){
@@ -523,6 +887,7 @@ namespace forms2{
 
 	void Form1::EndProgram()
 	{
+		stopAnalysis();
 		interrupt(false);
 		//delete camThread;
 		//STOP_COC(0);
