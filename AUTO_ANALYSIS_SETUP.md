@@ -7,12 +7,13 @@ analysis status but does not stop the camera or Cicero sequence.
 ## Lab computer prerequisites
 
 1. Build the `vs2026` Simplicio solution for `x64`.
-2. Place the Pixelfly-enabled `AnalysisCodeNew` checkout on the lab computer.
-3. Install its Python dependencies by running `Setup_Pixelfly_Analysis.ps1`
-   from that checkout, or run:
+2. Use the Pixelfly-enabled `AnalysisCodeNew` folder included in this
+   Simplicio checkout.
+3. Install its Python dependencies by running
+   `AnalysisCodeNew\Setup_Pixelfly_Analysis.ps1`, or run:
 
    ```powershell
-   python -m pip install -r requirements-pixelfly.txt
+   python -m pip install -r AnalysisCodeNew\requirements-pixelfly.txt
    ```
 
 ## Configure Simplicio
@@ -22,7 +23,7 @@ analysis status but does not stop the camera or Cicero sequence.
 3. Click `Analysis Setup` in the Image Preview box.
 4. Select the lab computer's `python.exe`.
 5. Select
-   `AnalysisCodeNew\Applications\Analyze_Pixelfly_AIA.py`.
+   `<Simplicio folder>\AnalysisCodeNew\Applications\Analyze_Pixelfly_AIA.py`.
 6. Select the imaging axis and the same binning used by the camera.
 7. Leave ROI blank to analyze the complete captured image, or enter
    `row start, row end, column start, column end`.

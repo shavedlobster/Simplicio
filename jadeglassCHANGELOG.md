@@ -544,6 +544,30 @@ These changes are local to the `shavedlobster/Simplicio` fork checkout on the
 - Built the complete Simplicio solution successfully as `Release|x64` with
   Visual Studio 18 MSBuild after adding the preview window.
 
+## 2026-10-26 — Include the Pixelfly Python analyzer in the fork
+
+These changes are in the `shavedlobster/Simplicio` fork checkout on the
+`vs2026` branch.
+
+### Changed
+
+- Added a self-contained `AnalysisCodeNew` folder to the Simplicio repository
+  so a lab-computer checkout contains the analyzer selected by Analysis Setup.
+- Included `Applications/Analyze_Pixelfly_AIA.py` and the required
+  `ImageAnalysis` modules for reading four-exposure AIA files, calculating
+  optical density, fitting the image, writing CSV results, and creating the
+  PNG preview.
+- Included `requirements-pixelfly.txt` and `Setup_Pixelfly_Analysis.ps1` for
+  installing the analyzer's Python packages on the lab computer.
+- Updated `AUTO_ANALYSIS_SETUP.md` to use the analyzer bundled with the
+  Simplicio checkout.
+
+### Validation
+
+- Ran the bundled analyzer against the four-exposure physical Pixelfly file
+  `2026-10-26-12;27;55.aia`; it read all four `1040 x 1392` frames and wrote
+  both the fitted CSV and PNG preview successfully.
+
 ## 2026-10-15 — Validate a physical four-exposure Pixelfly AIA file
 
 This was a validation-only step. No C++ acquisition or AIA-writing code was changed.
