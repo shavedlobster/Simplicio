@@ -29,6 +29,13 @@ namespace forms2{
 		virtual int getCols()=0;
 		virtual int getHBin(){getSettings();return hbin;}
 		virtual int getVBin(){getSettings();return vbin;}
+		virtual int getRoiX1(){getSettings();return roix1;}
+		virtual int getRoiX2(){getSettings();return roix2;}
+		virtual int getRoiY1(){getSettings();return roiy1;}
+		virtual int getRoiY2(){getSettings();return roiy2;}
+		virtual int getBitResolution(){return 16;}
+		virtual double getExposureMilliseconds(){return Double::NaN;}
+		virtual bool isExternalTriggerEnabled(){return false;}
 		virtual bool isDouble(){return false;}
 		virtual void update()=0;
 

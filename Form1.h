@@ -304,7 +304,7 @@ namespace forms2{
 			//
 			this->triggerBox->ColumnWidth = 65;
 			this->triggerBox->FormattingEnabled = true;
-			this->triggerBox->Items->AddRange(gcnew cli::array< System::Object^ >(2) {L"Internal", L"Ext Start"});
+			this->triggerBox->Items->AddRange(gcnew cli::array< System::Object^ >(2) {L"Internal", L"External each exposure"});
 			this->triggerBox->Location = System::Drawing::Point(82, 86);
 			this->triggerBox->MultiColumn = true;
 			this->triggerBox->Name = L"triggerBox";

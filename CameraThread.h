@@ -74,6 +74,7 @@ namespace forms2{
 		bool getInterrupt();
 		void setInterrupt(bool c);
 		void takeImages(Object^ layersObj);
+		void appendAcquisitionMetadata(LinkedList<Variable^>^ vars, int layers);
 		void finishedRunning();
 		void readLayers(int layersRead);
 		void gotImage(ImageData^ img);

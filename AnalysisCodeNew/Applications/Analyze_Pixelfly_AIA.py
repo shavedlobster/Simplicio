@@ -14,6 +14,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +22,61 @@ if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from ImageAnalysis import ImageAnalysisCode
+
+
+def assess_absorption_capture(raw_images, catalogue, *, max_invalid_fraction=0.25,
+                              max_saturated_fraction=0.01):
+    """Return per-set capture diagnostics and reject unusable frame sets."""
+    rows = []
+    problems = []
+    for index, raw in enumerate(raw_images):
+        atoms_signal = raw[1].astype(np.float64) - raw[3].astype(np.float64)
+        reference_signal = raw[2].astype(np.float64) - raw[3].astype(np.float64)
+        invalid = (atoms_signal <= 0) | (reference_signal <= 0)
+
+        bit_depth = 16
+        if 'Simplicio.Camera.BitDepth' in catalogue.columns:
+            reported = catalogue.iloc[index]['Simplicio.Camera.BitDepth']
+            if np.isfinite(reported) and 1 <= reported <= 16:
+                bit_depth = int(reported)
+        saturation_level = (1 << bit_depth) - 1
+        saturated = raw >= saturation_level
+
+        invalid_fraction = float(np.mean(invalid))
+        saturated_fraction = float(np.mean(saturated))
+        reference_median = float(np.median(reference_signal))
+        row = {
+            'AtomsFrameMean': float(np.mean(raw[1])),
+            'ReferenceFrameMean': float(np.mean(raw[2])),
+            'DarkFrameMean': float(np.mean(raw[3])),
+            'ReferenceMinusDarkMedian': reference_median,
+            'InvalidPixelFraction': invalid_fraction,
+            'SaturatedPixelFraction': saturated_fraction,
+            'CaptureQuality': 'PASS',
+        }
+
+        set_problems = []
+        if reference_median <= 0:
+            set_problems.append('reference frame is not brighter than the dark frame')
+        if invalid_fraction > max_invalid_fraction:
+            set_problems.append(
+                'invalid pixel fraction {:.1%} exceeds {:.1%}'.format(
+                    invalid_fraction, max_invalid_fraction))
+        if saturated_fraction > max_saturated_fraction:
+            set_problems.append(
+                'saturated pixel fraction {:.1%} exceeds {:.1%}'.format(
+                    saturated_fraction, max_saturated_fraction))
+        if set_problems:
+            row['CaptureQuality'] = 'FAIL'
+            problems.append('set {}: {}'.format(index, '; '.join(set_problems)))
+        rows.append(row)
+
+    quality = pd.DataFrame(rows, index=catalogue.index)
+    if problems:
+        raise ValueError(
+            'Capture validation failed before fitting. Check Cicero trigger timing '
+            'and the atoms/reference/dark frame order. ' + ' | '.join(problems))
+    return quality
 
 
 def _find_first_aia(paths: list[Path]) -> Path:
@@ -106,7 +162,7 @@ def save_analysis_preview(path, raw_images, optical_density, *, title=None):
 
 def analyze_pixelfly_aia(paths, *, date=None, axis='side', binning=1,
                           roi=None, rotate=0.0, exam_range=(None, None),
-                          show_raw=False):
+                          show_raw=False, max_invalid_fraction=0.25):
     """Run the reusable Pixelfly preprocessing and fitting workflow.
 
     Returns ``(results, optical_density, raw_images)`` so interactive tools,
@@ -127,6 +183,23 @@ def analyze_pixelfly_aia(paths, *, date=None, axis='side', binning=1,
         expectedExposures=4,
     )
 
+    quality = assess_absorption_capture(
+        raw_images, catalogue, max_invalid_fraction=max_invalid_fraction)
+
+    if ('Simplicio.Camera.HorizontalBinning' in catalogue.columns and
+            'Simplicio.Camera.VerticalBinning' in catalogue.columns):
+        horizontal = int(catalogue.iloc[0]['Simplicio.Camera.HorizontalBinning'])
+        vertical = int(catalogue.iloc[0]['Simplicio.Camera.VerticalBinning'])
+        if horizontal != vertical:
+            raise ValueError(
+                'The legacy analysis requires equal horizontal and vertical '
+                'binning; the AIA metadata reports {} x {}.'.format(
+                    horizontal, vertical))
+        if horizontal != binning:
+            print('Using captured camera binning {} instead of configured {}.'.format(
+                horizontal, binning))
+        binning = horizontal
+
     params = ImageAnalysisCode.ExperimentParams(
         date=experiment_date,
         picturesPerIteration=4,
@@ -138,10 +211,12 @@ def analyze_pixelfly_aia(paths, *, date=None, axis='side', binning=1,
     column_densities = optical_density / params.cross_section
 
     fit_parameters, backgrounds = ImageAnalysisCode.FitColumnDensity(
-        column_densities, dx=dx_microns, mode='both', yFitMode='single')
+        column_densities, dx=dx_microns, mode='both', yFitMode='single',
+        subtract_bg=0, Xsignal_feature='wide', Ysignal_feature='wide')
     results = ImageAnalysisCode.AnalyseFittingResults(
         fit_parameters, logTime=catalogue.index)
     results = results.join(catalogue)
+    results = results.join(quality)
 
     return results, optical_density, raw_images
 

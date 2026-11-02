@@ -2,6 +2,57 @@
 
 This file records changes made for the jadeglass Pixelfly adaptation of Simplicio.
 
+## 2026-11-02 — Synchronize every Pixelfly exposure with Cicero and match legacy fitting
+
+These changes are made in the `shavedlobster/Simplicio` fork checkout on the
+`vs2026` branch. They supersede the 2026-10-19 set-level `Ext Start` behavior
+after physical AIA inspection showed that four immediate software-triggered
+frames did not represent Cicero's four imaging states.
+
+### Acquisition
+
+- Renamed the UI trigger choice to `External each exposure`.
+- In that mode, arm the Pixelfly with `TRIGGER_MODE_EXTERNALTRIGGER`, queue one
+  buffer per exposure, and wait for one physical Cicero pulse per frame.
+- Do not call `PCO_ForceTrigger` in external mode; Internal mode retains one
+  software trigger per requested exposure.
+- Store Pixelfly dimensions, frame count, binning, ROI, dynamic bit depth,
+  exposure time, and trigger mode as numeric AIA metadata.
+- When automatic analysis is enabled, select and lock AIA format and four
+  exposures, and require Save plus an existing save folder.
+
+### Analysis
+
+- Explicitly call the legacy Gaussian fitting path with `subtract_bg=0` and
+  `wide` X/Y features, matching `Analyze_Atom_Pictures.py` instead of exposing
+  the shared function's asymmetric defaults.
+- Validate atoms/reference/dark signals before fitting. Reject a set when the
+  reference is not brighter than dark, more than 25% of pixels are invalid,
+  or more than 1% are saturated.
+- Add frame means, reference-minus-dark median, invalid/saturated fractions,
+  and `CaptureQuality` to successful CSV results.
+- Use equal captured H/V binning from AIA metadata when available and reject
+  unequal binning, which the current legacy physical-scale calculation cannot
+  represent correctly.
+
+### Preview scope
+
+- No preview layout changes were made in this step.
+
+### Validation
+
+- Built the complete solution successfully as `Release|x64` with Visual
+  Studio 18 MSBuild.
+- Passed all four existing Python AIA reader and preprocessing regression
+  tests against the bundled analysis code.
+- Passed a synthetic four-frame cloud through capture validation, automatic
+  metadata binning selection, legacy fitting, CSV output, and PNG output.
+- Confirmed that the prior physical noise-only file
+  `2026-10-26-13;57;16.aia` is rejected before fitting because its reference
+  is not brighter than dark and 69.7% of pixels are invalid.
+- Physical validation with four correctly timed Cicero pulses remains
+  required on the lab computer.
+
 ## 2026-10-19 — Make the external signal start a complete exposure set
 
 These changes are included on branch `vs2026` in the user's `shavedlobster/Simplicio` fork.

@@ -27,7 +27,17 @@ analysis status but does not stop the camera or Cicero sequence.
 6. Select the imaging axis and the same binning used by the camera.
 7. Leave ROI blank to analyze the complete captured image, or enter
    `row start, row end, column start, column end`.
-8. Click `Save`, then enable `Analyze saved images`.
+8. Click `Save`, then enable `Analyze saved images`. Simplicio selects AIA,
+   sets and locks four exposures, and requires Save to remain enabled.
+
+For Cicero cloud acquisition, select `External each exposure`. Cicero must
+send four camera pulses in burn-in, atoms, reference, and dark order.
+
+Before fitting, the analyzer checks that the reference is brighter than the
+dark frame and that no more than 25% of pixels have nonpositive atoms-minus-
+dark or reference-minus-dark signal. Invalid sets fail with a trigger/frame-
+order diagnostic instead of fitting noise. Captured Pixelfly binning stored in
+the AIA metadata overrides a stale Analysis Setup binning value.
 
 The configuration is stored for the current Windows user in
 `%APPDATA%\Simplicio\pixelfly-analysis.settings`.

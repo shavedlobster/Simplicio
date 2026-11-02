@@ -32,6 +32,9 @@ namespace forms2 {
 
 		virtual int getRows() override;
 		virtual int getCols() override;
+		virtual int getBitResolution() override { return bitResolution; }
+		virtual double getExposureMilliseconds() override { return exposureMilliseconds; }
+		virtual bool isExternalTriggerEnabled() override { return externalStart; }
 		virtual bool isDouble() override;
 		virtual void update() override;
 
@@ -46,13 +49,12 @@ namespace forms2 {
 		WORD imageWidth;
 		WORD imageHeight;
 		WORD bitResolution;
+		double exposureMilliseconds;
 		DWORD bufferBytes;
 		int lastError;
 		bool framePending;
 		bool recording;
 		bool externalStart;
-		bool waitingForExternalStart;
-		bool externalStartSawLow;
 		bool softwareTriggerIssued;
 
 		void releaseBuffer();

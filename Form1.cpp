@@ -442,6 +442,18 @@ namespace forms2{
 
 	System::Void Form1::autoAnalyzeCheckBox_CheckedChanged(System::Object^ sender, System::EventArgs^ e){
 		if(autoAnalyzeCheckBox->Checked){
+			layersBox->Value=4;
+			layersBox->Enabled=false;
+			formatListBox->SelectedItem="aia";
+			formatListBox->Enabled=false;
+			if(!saveCheckBox->Checked)
+				saveCheckBox->Checked=true;
+			if(!saveCheckBox->Checked || String::IsNullOrWhiteSpace(savePath) || !Directory::Exists(savePath)){
+				MessageBox::Show("Automatic analysis requires an existing save folder and Save enabled.",
+					"Pixelfly Analysis",MessageBoxButtons::OK,MessageBoxIcon::Information);
+				autoAnalyzeCheckBox->Checked=false;
+				return;
+			}
 			if(!validateAnalysisSettings(false)){
 				analysisSetupButton_Click(sender,e);
 				if(!validateAnalysisSettings(false)){
@@ -451,6 +463,9 @@ namespace forms2{
 			}
 			setAnalysisStatus("Analysis: waiting for saved AIA files");
 		}else{
+			bool acquiring=camThread!=nullptr && camThread->isRunning();
+			layersBox->Enabled=!acquiring;
+			formatListBox->Enabled=!acquiring;
 			setAnalysisStatus("Analysis: off");
 		}
 	}
@@ -1040,9 +1055,17 @@ namespace forms2{
 	
 	void Form1::acquire(bool runLoop)
 	{
+		if(autoAnalyzeCheckBox->Checked &&
+			((int)layersBox->Value!=4 || !saveCheckBox->Checked ||
+			 String::IsNullOrWhiteSpace(savePath) || !Directory::Exists(savePath) ||
+			 formatListBox->SelectedItem==nullptr || formatListBox->SelectedItem->ToString()!="aia")){
+			MessageBox::Show("Automatic Pixelfly analysis requires AIA format, four exposures, Save enabled, and an existing save folder.",
+				"Simplicio",MessageBoxButtons::OK,MessageBoxIcon::Warning);
+			return;
+		}
 		bool externalStart = triggerBox->SelectedIndex == 1;
 		if (!camThread->setExternalStart(externalStart)){
-			MessageBox::Show("The selected camera does not support Simplicio's external-start mode.",
+			MessageBox::Show("The selected camera does not support external triggering for each exposure.",
 				"Simplicio",MessageBoxButtons::OK,MessageBoxIcon::Warning);
 			return;
 		}
@@ -1092,7 +1115,8 @@ namespace forms2{
 			imageProgressBar->Value = value;
 	}
 	void Form1::loopFinished(){
-		layersBox->Enabled = true;
+		layersBox->Enabled = !autoAnalyzeCheckBox->Checked;
+		formatListBox->Enabled = !autoAnalyzeCheckBox->Checked;
 		triggerBox->Enabled = true;
 		runIndicator->Checked = false;
 	}

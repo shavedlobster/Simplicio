@@ -31,10 +31,9 @@ namespace forms2 {
 
 	PixelflyUsbDriver::PixelflyUsbDriver()
 		: camera(NULL), bufferEvent(NULL), bufferNumber(-1), cameraBuffer(NULL),
-		  imageWidth(0), imageHeight(0), bitResolution(16), bufferBytes(0),
+		  imageWidth(0), imageHeight(0), bitResolution(16), exposureMilliseconds(Double::NaN), bufferBytes(0),
 		  lastError(PCO_NOERROR), framePending(false), recording(false),
-		  externalStart(false), waitingForExternalStart(false),
-		  externalStartSawLow(false), softwareTriggerIssued(false) {
+		  externalStart(false), softwareTriggerIssued(false) {
 		roix1 = roiy1 = 1;
 		roix2 = roiy2 = 0;
 		hbin = vbin = 1;
@@ -342,9 +341,10 @@ namespace forms2 {
 		stop();
 		releaseBuffer();
 
-		// External Start observes the hardware trigger input once, then uses the
-		// supported software-trigger path for every exposure in the image set.
-		lastError = PCO_SetTriggerMode(camera, TRIGGER_MODE_SOFTWARETRIGGER);
+		// In external mode every queued exposure waits for its own Cicero pulse.
+		// Internal mode continues to use one software trigger per exposure.
+		lastError = PCO_SetTriggerMode(camera,
+			externalStart ? TRIGGER_MODE_EXTERNALTRIGGER : TRIGGER_MODE_SOFTWARETRIGGER);
 		if (lastError == PCO_NOERROR)
 			lastError = PCO_SetAcquireMode(camera, 0x0000); // Ignore acquire-enable input.
 		if (lastError == PCO_NOERROR)
@@ -400,16 +400,14 @@ namespace forms2 {
 
 		recording = true;
 		framePending = false;
-		waitingForExternalStart = false;
-		externalStartSawLow = false;
 		softwareTriggerIssued = false;
 		getSettings();
 		return 0;
 	}
 
 	void PixelflyUsbDriver::beginImageSet() {
-		waitingForExternalStart = externalStart;
-		externalStartSawLow = false;
+		// Each expose() call queues one frame. In external mode the camera then
+		// waits for one hardware trigger, so no set-level trigger state is needed.
 	}
 
 	void PixelflyUsbDriver::expose() {
@@ -425,8 +423,8 @@ namespace forms2 {
 			return;
 
 		framePending = true;
-		softwareTriggerIssued = false;
-		if (!waitingForExternalStart) {
+		softwareTriggerIssued = externalStart;
+		if (!externalStart) {
 			WORD triggered = 0;
 			lastError = PCO_ForceTrigger(camera, &triggered);
 			if (lastError == PCO_NOERROR && triggered == 0)
@@ -442,30 +440,6 @@ namespace forms2 {
 			return IMAGE_ERROR;
 		if (!framePending)
 			return CAMERA_IDLE;
-
-		if (waitingForExternalStart) {
-			WORD triggerSignal = 1; // PCO reports 1 for low and 0 for high.
-			lastError = PCO_GetExpTrigSignalStatus(camera, &triggerSignal);
-			if (lastError != PCO_NOERROR)
-				return IMAGE_ERROR;
-			if (triggerSignal != 0) {
-				externalStartSawLow = true;
-				return CAMERA_BUSY;
-			}
-			// Require a low-to-high transition so a stale high level cannot start
-			// more than one image set during repeated acquisition.
-			if (!externalStartSawLow)
-				return CAMERA_BUSY;
-
-			waitingForExternalStart = false;
-			WORD triggered = 0;
-			lastError = PCO_ForceTrigger(camera, &triggered);
-			if (lastError == PCO_NOERROR && triggered == 0)
-				lastError = PCO_ERROR_APPLICATION;
-			if (lastError != PCO_NOERROR)
-				return IMAGE_ERROR;
-			softwareTriggerIssued = true;
-		}
 
 		if (!softwareTriggerIssued)
 			return CAMERA_BUSY;
@@ -519,8 +493,6 @@ namespace forms2 {
 			PCO_SetRecordingState(camera, 0x0000);
 		recording = false;
 		framePending = false;
-		waitingForExternalStart = false;
-		externalStartSawLow = false;
 		softwareTriggerIssued = false;
 	}
 
@@ -548,6 +520,8 @@ namespace forms2 {
 
 		WORD x0 = 1, y0 = 1, x1 = 0, y1 = 0;
 		WORD horizontalBinning = 1, verticalBinning = 1;
+		DWORD delay = 0, exposure = 0;
+		WORD delayBase = 0, exposureBase = 0;
 		if (PCO_GetROI(camera, &x0, &y0, &x1, &y1) == PCO_NOERROR) {
 			roix1 = x0;
 			roiy1 = y0;
@@ -557,6 +531,10 @@ namespace forms2 {
 		if (PCO_GetBinning(camera, &horizontalBinning, &verticalBinning) == PCO_NOERROR) {
 			hbin = horizontalBinning;
 			vbin = verticalBinning;
+		}
+		if (PCO_GetDelayExposureTime(camera, &delay, &exposure, &delayBase, &exposureBase) == PCO_NOERROR) {
+			exposureMilliseconds = exposureBase == 0 ? exposure / 1000000.0 :
+				(exposureBase == 1 ? exposure / 1000.0 : (double)exposure);
 		}
 		WORD actualWidth = 0, actualHeight = 0, maxWidth = 0, maxHeight = 0;
 		if (PCO_GetSizes(camera, &actualWidth, &actualHeight, &maxWidth, &maxHeight) == PCO_NOERROR) {

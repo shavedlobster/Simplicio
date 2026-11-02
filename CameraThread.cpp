@@ -354,6 +354,7 @@ namespace forms2{
 				}
 				
 				ImageData^ img = gcnew ImageData(buf,temprows,cols,templayers,(dbl==2),singleFrame,datetime); 
+				appendAcquisitionMetadata(seqVars,layers);
 				img->setSeqVars(seqVars);
 				seqVars->Clear();
 				//save
@@ -421,6 +422,36 @@ namespace forms2{
 			newvar->VariableValue = var->VariableValue;
 			newvar->VariableName = var->VariableName;
 			seqVars->AddLast(newvar);
+		}
+	}
+	void CameraThread::appendAcquisitionMetadata(LinkedList<Variable^>^ vars, int layers){
+		if (vars==nullptr || driver==nullptr ||
+			!driver->getDriverName()->Equals("pco.pixelfly 1.4 USB"))
+			return;
+
+		array<String^>^ names = gcnew array<String^>{
+			"Simplicio.Camera.Rows", "Simplicio.Camera.Columns",
+			"Simplicio.Camera.Exposures", "Simplicio.Camera.HorizontalBinning",
+			"Simplicio.Camera.VerticalBinning", "Simplicio.Camera.RoiX1",
+			"Simplicio.Camera.RoiX2", "Simplicio.Camera.RoiY1",
+			"Simplicio.Camera.RoiY2", "Simplicio.Camera.BitDepth",
+			"Simplicio.Camera.ExposureMilliseconds",
+			"Simplicio.Camera.ExternalTriggerEachExposure"
+		};
+		array<double>^ values = gcnew array<double>{
+			(double)driver->getRows(), (double)driver->getCols(), (double)layers,
+			(double)driver->getHBin(), (double)driver->getVBin(),
+			(double)driver->getRoiX1(), (double)driver->getRoiX2(),
+			(double)driver->getRoiY1(), (double)driver->getRoiY2(),
+			(double)driver->getBitResolution(), driver->getExposureMilliseconds(),
+			driver->isExternalTriggerEnabled() ? 1.0 : 0.0
+		};
+
+		for (int index=0; index<names->Length; index++){
+			Variable^ metadata = gcnew Variable();
+			metadata->VariableName = names[index];
+			metadata->VariableValue = values[index];
+			vars->AddLast(metadata);
 		}
 	}
 }
