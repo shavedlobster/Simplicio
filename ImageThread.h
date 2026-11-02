@@ -10,6 +10,7 @@ namespace forms2{
 		static double MAX_OD = 5;
 		static double MIN_T = Math::Exp(-MAX_OD);
 		bool processImage(ImageData^ img, bool savefile,int binsize,int pixelsize);
+		bool rerenderImage(ImageData^ img, int binsize, int pixelsize);
 		void setSingleFrame(bool sf){singleFrame=sf;}
 		bool getSingleFrame() {return singleFrame;}
 	private:
@@ -17,6 +18,7 @@ namespace forms2{
 		delegate void DelegateBuffersIntImg(array<BufferedGraphics^>^ newbuffers, int num, ImageData^ img);
 		
 		DelegateBuffersIntImg^ addBuffersMainForm;
+		DelegateBuffersIntImg^ replaceBuffersMainForm;
 		Form1^ mainForm;
 		ImageData^ imageData;
 		int processing;
@@ -24,6 +26,7 @@ namespace forms2{
 		int binSize;
 		int pixelSize;
 		bool processSingleFrame;
+		bool replaceExisting;
 		array<BufferedGraphics^>^ buffers;
 		int numBuffers;
 		bool singleFrame;

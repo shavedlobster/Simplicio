@@ -60,6 +60,9 @@ namespace forms2{
 		camThread->initCamera();
 		camThread->setSave(false);
 		imgThread = gcnew ImageThread(this);
+		previewResizeTimer=gcnew System::Windows::Forms::Timer();
+		previewResizeTimer->Interval=150;
+		previewResizeTimer->Tick+=gcnew EventHandler(this,&Form1::previewResizeTimer_Tick);
 		String^ sname = gcnew String("Simplicio Server");
 		setServerName(sname);
 		serverNameBox->Text = sname;
@@ -131,8 +134,27 @@ namespace forms2{
 		 camThread->setSingleFrame(sf);
 	}
 	void Form1::resize(){
-		pictureBox->Width = this->Width - 389;
-		pictureBox->Height = this->Height - 88;
+		if (pictureBox==nullptr || pictureBox->Width<1 || pictureBox->Height<1)
+			return;
+		if (context!=nullptr)
+			context->MaximumBuffer=System::Drawing::Size(
+				Math::Max(this->Width+1,pictureBox->Width+1),
+				Math::Max(this->Height+1,pictureBox->Height+1));
+		pictureBox->Invalidate();
+		if (previewResizeTimer!=nullptr && this->WindowState!=FormWindowState::Minimized){
+			previewResizeTimer->Stop();
+			previewResizeTimer->Start();
+		}
+	}
+	System::Void Form1::previewResizeTimer_Tick(System::Object^, System::EventArgs^){
+		previewResizeTimer->Stop();
+		if (imgThread==nullptr || camThread==nullptr || camThread->isRunning())
+			return;
+		int bufferIndex=getHistoryIndex(displayedImgInd);
+		if (bufferIndex<0 || imgDataArray[bufferIndex]==nullptr)
+			return;
+		if (imgThread->rerenderImage(imgDataArray[bufferIndex],(int)zoomBox->Value,(int)pixelSizeBox->Value))
+			previewResizeTimer->Start();
 	}
 	array<BufferedGraphics^>^ Form1::getEmptyBuffers(int numbuffers){
 		if (numbuffers<1) return nullptr;
@@ -630,6 +652,25 @@ namespace forms2{
 		//if(!img->getSaved())
 		imgDataArray[imgDataIndex]=img;
 		setDisplayImage(0,0);
+	}
+	void Form1::replaceDisplayedBuffers(array<BufferedGraphics^>^ newbuffers, int numbuffers,ImageData^ img){
+		if (newbuffers==nullptr || numbuffers<1)
+			return;
+		int bufferIndex=getHistoryIndex(displayedImgInd);
+		if (bufferIndex<0 || imgDataArray[bufferIndex]!=img){
+			for each(BufferedGraphics^ buffer in newbuffers)
+				if (buffer!=nullptr) delete buffer;
+			return;
+		}
+
+		array<BufferedGraphics^>^ oldBuffers=buffers[bufferIndex];
+		buffers[bufferIndex]=newbuffers;
+		layerHistory[bufferIndex]=numbuffers;
+		int layer=Math::Max(0,Math::Min(displayedLayer,numbuffers-1));
+		setDisplayImage(displayedImgInd,layer);
+		if (oldBuffers!=nullptr)
+			for each(BufferedGraphics^ buffer in oldBuffers)
+				if (buffer!=nullptr) delete buffer;
 	}
 	/*
 	void Form1::processNewImage(Object^ imgObj){

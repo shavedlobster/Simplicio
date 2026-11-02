@@ -2,6 +2,18 @@
 
 This file records changes made for the jadeglass Pixelfly adaptation of Simplicio.
 
+## 2026-11-02 — Make the main UI and image preview resize cleanly
+
+- Anchor the main image surface to every side of the window so it fills the
+  available area when the form is resized or maximized.
+- Replace the end-of-drag-only resize calculation with live WinForms anchoring
+  and a short debounce timer.
+- Regenerate the currently displayed preview at the new panel dimensions after
+  resizing, without saving another file or adding a duplicate history entry.
+- Dispose the replaced preview buffers after the new buffers are displayed.
+- Keep this change local on `vs2026` until it is explicitly requested for the
+  `shavedlobster/Simplicio` fork.
+
 ## 2026-11-02 — Display the Pixelfly minimum camera cycle
 
 - Query `PCO_GetCOCRuntime` whenever Pixelfly settings are read.

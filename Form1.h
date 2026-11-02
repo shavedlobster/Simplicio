@@ -325,6 +325,8 @@ namespace forms2{
 			// pictureBox
 			// 
 			this->pictureBox->BackColor = System::Drawing::Color::Black;
+			this->pictureBox->Anchor = static_cast<System::Windows::Forms::AnchorStyles>((((System::Windows::Forms::AnchorStyles::Top | System::Windows::Forms::AnchorStyles::Bottom)
+				| System::Windows::Forms::AnchorStyles::Left) | System::Windows::Forms::AnchorStyles::Right));
 			this->pictureBox->Location = System::Drawing::Point(369, 42);
 			this->pictureBox->Name = L"pictureBox";
 			this->pictureBox->Size = System::Drawing::Size(878, 927);
@@ -571,6 +573,8 @@ namespace forms2{
 			this->AutoScaleDimensions = System::Drawing::SizeF(6, 13);
 			this->AutoScaleMode = System::Windows::Forms::AutoScaleMode::Font;
 			this->ClientSize = System::Drawing::Size(1259, 981);
+			this->DoubleBuffered = true;
+			this->ResizeRedraw = true;
 			this->Controls->Add(this->currentServerNameLabel);
 			this->Controls->Add(this->label1);
 			this->Controls->Add(this->serverNameBox);
@@ -602,7 +606,7 @@ namespace forms2{
 			this->Icon = (cli::safe_cast<System::Drawing::Icon^  >(resources->GetObject(L"$this.Icon")));
 			this->Name = L"Form1";
 			this->Text = L"Simplicio SensiCam Controller";
-			this->ResizeEnd += gcnew System::EventHandler(this, &Form1::Form1_ResizeEnd);
+			this->Resize += gcnew System::EventHandler(this, &Form1::Form1_Resize);
 			(cli::safe_cast<System::ComponentModel::ISupportInitialize^  >(this->layersBox))->EndInit();
 			(cli::safe_cast<System::ComponentModel::ISupportInitialize^  >(this->pictureBox))->EndInit();
 			(cli::safe_cast<System::ComponentModel::ISupportInitialize^  >(this->zoomBox))->EndInit();
@@ -621,6 +625,7 @@ namespace forms2{
 		void addImageData(ImageData^ img);
 		array<BufferedGraphics^>^ getEmptyBuffers(int numbuffers);
 		void addBuffers(array<BufferedGraphics^>^ newbuffers, int numbuffers,ImageData^ img);
+		void replaceDisplayedBuffers(array<BufferedGraphics^>^ newbuffers, int numbuffers,ImageData^ img);
 		void sequenceStarted(LinkedList<Variable^>^ listvars);
 		void setNextTime(DateTime nextTime);
 		bool isSingleFrame();
@@ -655,6 +660,7 @@ namespace forms2{
 		System::Windows::Forms::Form^ analysisPreviewForm;
 		System::Windows::Forms::PictureBox^ analysisPreviewPictureBox;
 		System::Windows::Forms::Label^ analysisPreviewPathLabel;
+		System::Windows::Forms::Timer^ previewResizeTimer;
 		//UInt16 layers;
 		//CameraSettings camSet;
 		CameraThread^ camThread;
@@ -741,7 +747,8 @@ namespace forms2{
 		System::Void analysisPythonBrowse_Click(System::Object^ sender, System::EventArgs^ e);
 		System::Void analysisScriptBrowse_Click(System::Object^ sender, System::EventArgs^ e);
 		System::Void analysisPreviewFormClosed(System::Object^ sender, System::Windows::Forms::FormClosedEventArgs^ e);
-		System::Void Form1_ResizeEnd(System::Object^  sender, System::EventArgs^  e) {resize();}
+		System::Void Form1_Resize(System::Object^ sender, System::EventArgs^ e) {resize();}
+		System::Void previewResizeTimer_Tick(System::Object^ sender, System::EventArgs^ e);
 private: System::Void folderBrowserDialog_HelpRequest(System::Object^  sender, System::EventArgs^  e) {
 		 }
 private: System::Void pathLink_LinkClicked(System::Object^  sender, System::Windows::Forms::LinkLabelLinkClickedEventArgs^  e) {

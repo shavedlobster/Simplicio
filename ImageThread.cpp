@@ -18,7 +18,9 @@ namespace forms2{
 		saveFile=true;
 		singleFrame = f->isSingleFrame();
 		processSingleFrame = singleFrame;
+		replaceExisting = false;
 		addBuffersMainForm = gcnew DelegateBuffersIntImg(f,&Form1::addBuffers);
+		replaceBuffersMainForm = gcnew DelegateBuffersIntImg(f,&Form1::replaceDisplayedBuffers);
 	}
 	bool ImageThread::processImage(ImageData^ img, bool savefile,int binsize,int pixelsize){
 		if (img==nullptr || Interlocked::CompareExchange(processing,1,0)!=0) return true;
@@ -27,8 +29,27 @@ namespace forms2{
 		binSize=Math::Max(binsize,1);
 		pixelSize=Math::Max(pixelsize,1);
 		processSingleFrame=singleFrame;
+		replaceExisting=false;
 		try{
 			Thread^ imageThread = gcnew Thread(gcnew ThreadStart(this,&ImageThread::processNewImage));
+			imageThread->Start();
+		}
+		catch(Exception^){
+			Interlocked::Exchange(processing,0);
+			throw;
+		}
+		return false;
+	}
+	bool ImageThread::rerenderImage(ImageData^ img, int binsize, int pixelsize){
+		if (img==nullptr || Interlocked::CompareExchange(processing,1,0)!=0) return true;
+		imageData=img;
+		saveFile=false;
+		binSize=Math::Max(binsize,1);
+		pixelSize=Math::Max(pixelsize,1);
+		processSingleFrame=singleFrame;
+		replaceExisting=true;
+		try{
+			Thread^ imageThread=gcnew Thread(gcnew ThreadStart(this,&ImageThread::processNewImage));
 			imageThread->Start();
 		}
 		catch(Exception^){
@@ -246,7 +267,7 @@ namespace forms2{
 		parameters[0] = buffers;
 		parameters[1] = numBuffers;
 		parameters[2] = imageData;
-		mainForm->BeginInvoke(addBuffersMainForm, parameters);
+		mainForm->BeginInvoke(replaceExisting ? replaceBuffersMainForm : addBuffersMainForm, parameters);
 	}
 
 }
