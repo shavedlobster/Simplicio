@@ -31,7 +31,8 @@ namespace forms2 {
 
 	PixelflyUsbDriver::PixelflyUsbDriver()
 		: camera(NULL), bufferEvent(NULL), bufferNumber(-1), cameraBuffer(NULL),
-		  imageWidth(0), imageHeight(0), bitResolution(16), exposureMilliseconds(Double::NaN), bufferBytes(0),
+		  imageWidth(0), imageHeight(0), bitResolution(16), exposureMilliseconds(Double::NaN),
+		  minimumCycleMilliseconds(Double::NaN), bufferBytes(0),
 		  lastError(PCO_NOERROR), framePending(false), recording(false),
 		  externalStart(false), softwareTriggerIssued(false) {
 		roix1 = roiy1 = 1;
@@ -145,6 +146,12 @@ namespace forms2 {
 
 		double exposureMs = exposureBase == 0 ? exposure / 1000000.0 :
 			(exposureBase == 1 ? exposure / 1000.0 : (double)exposure);
+		DWORD cycleSeconds = 0;
+		DWORD cycleNanoseconds = 0;
+		if (PCO_GetCOCRuntime(camera, &cycleSeconds, &cycleNanoseconds) == PCO_NOERROR)
+			minimumCycleMilliseconds = cycleSeconds * 1000.0 + cycleNanoseconds / 1000000.0;
+		else
+			minimumCycleMilliseconds = Double::NaN;
 		double minimumExposureMs = description.dwMinExposureDESC / 1000000.0;
 		double maximumExposureMs = (double)description.dwMaxExposureDESC;
 		if (maximumExposureMs < minimumExposureMs)
@@ -157,13 +164,13 @@ namespace forms2 {
 		dialog->MinimizeBox = false;
 		dialog->MaximizeBox = false;
 		dialog->ShowInTaskbar = false;
-		dialog->ClientSize = System::Drawing::Size(560, 350);
+		dialog->ClientSize = System::Drawing::Size(560, 380);
 
 		TableLayoutPanel^ table = gcnew TableLayoutPanel();
 		table->Dock = DockStyle::Fill;
 		table->Padding = Padding(12);
 		table->ColumnCount = 3;
-		table->RowCount = 8;
+		table->RowCount = 9;
 		table->ColumnStyles->Add(gcnew ColumnStyle(SizeType::Absolute, 145));
 		table->ColumnStyles->Add(gcnew ColumnStyle(SizeType::Absolute, 190));
 		table->ColumnStyles->Add(gcnew ColumnStyle(SizeType::Percent, 100));
@@ -207,12 +214,15 @@ namespace forms2 {
 			String::Format("({0}, {1}) through ({2}, {3})", x0, y0, x1, y1));
 		addSettingsRow(table, 5, "Current output size", gcnew Label(), String::Format("{0} x {1} pixels", actualWidth, actualHeight));
 		addSettingsRow(table, 6, "Dynamic resolution", gcnew Label(), String::Format("{0} bit", description.wDynResDESC));
+		addSettingsRow(table, 7, "Minimum camera cycle", gcnew Label(),
+			Double::IsNaN(minimumCycleMilliseconds) ? "Unavailable" :
+			String::Format("{0:F3} ms (SDK-reported lower bound)", minimumCycleMilliseconds));
 
 		Label^ instruction = gcnew Label();
-		instruction->Text = "Apply selects the Pixelfly sensor format, then binning. The accepted area and output size are confirmed after the camera is armed.";
+		instruction->Text = "Apply selects the Pixelfly sensor format, then binning. The accepted area, output size, and minimum camera cycle are confirmed after the camera is armed. The cycle does not include Simplicio's current single-buffer requeue overhead.";
 		instruction->AutoSize = true;
 		instruction->MaximumSize = System::Drawing::Size(470, 0);
-		table->Controls->Add(instruction, 0, 7);
+		table->Controls->Add(instruction, 0, 8);
 		table->SetColumnSpan(instruction, 3);
 
 		FlowLayoutPanel^ buttons = gcnew FlowLayoutPanel();
@@ -299,12 +309,14 @@ namespace forms2 {
 		imageHeight = actualHeight;
 		bitResolution = description.wDynResDESC;
 		getSettings();
+		String^ cycleText = Double::IsNaN(minimumCycleMilliseconds) ? "Unavailable" :
+			String::Format("{0:F3} ms", minimumCycleMilliseconds);
 		String^ acceptedArea = sensorFormat == SENSORFORMAT_EXTENDED ?
 			String::Format("Centered region ({0} x {1})", description.wMaxHorzResExtDESC, description.wMaxVertResExtDESC) :
 			String::Format("Full sensor ({0} x {1})", description.wMaxHorzResStdDESC, description.wMaxVertResStdDESC);
 		MessageBox::Show(
-			String::Format("Camera accepted:\r\n\r\nArea: {0}\r\nBinning: {1} x {2}\r\nOutput: {3} x {4} pixels\r\nCamera ROI: ({5}, {6}) through ({7}, {8})",
-				acceptedArea, binH, binV, actualWidth, actualHeight, x0, y0, x1, y1),
+			String::Format("Camera accepted:\r\n\r\nArea: {0}\r\nBinning: {1} x {2}\r\nOutput: {3} x {4} pixels\r\nCamera ROI: ({5}, {6}) through ({7}, {8})\r\nMinimum camera cycle: {9}",
+				acceptedArea, binH, binV, actualWidth, actualHeight, x0, y0, x1, y1, cycleText),
 			"pco.pixelfly 1.4 USB", MessageBoxButtons::OK, MessageBoxIcon::Information);
 		return 0;
 	}
@@ -536,6 +548,11 @@ namespace forms2 {
 			exposureMilliseconds = exposureBase == 0 ? exposure / 1000000.0 :
 				(exposureBase == 1 ? exposure / 1000.0 : (double)exposure);
 		}
+		DWORD cycleSeconds = 0, cycleNanoseconds = 0;
+		if (PCO_GetCOCRuntime(camera, &cycleSeconds, &cycleNanoseconds) == PCO_NOERROR)
+			minimumCycleMilliseconds = cycleSeconds * 1000.0 + cycleNanoseconds / 1000000.0;
+		else
+			minimumCycleMilliseconds = Double::NaN;
 		WORD actualWidth = 0, actualHeight = 0, maxWidth = 0, maxHeight = 0;
 		if (PCO_GetSizes(camera, &actualWidth, &actualHeight, &maxWidth, &maxHeight) == PCO_NOERROR) {
 			imageWidth = actualWidth;

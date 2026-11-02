@@ -50,6 +50,7 @@ namespace forms2 {
 		WORD imageHeight;
 		WORD bitResolution;
 		double exposureMilliseconds;
+		double minimumCycleMilliseconds;
 		DWORD bufferBytes;
 		int lastError;
 		bool framePending;

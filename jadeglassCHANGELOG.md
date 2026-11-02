@@ -2,6 +2,16 @@
 
 This file records changes made for the jadeglass Pixelfly adaptation of Simplicio.
 
+## 2026-11-02 — Display the Pixelfly minimum camera cycle
+
+- Query `PCO_GetCOCRuntime` whenever Pixelfly settings are read.
+- Display the SDK-reported minimum image cycle in the Pixelfly Camera Settings
+  window and in the confirmation shown after settings are applied.
+- Label the value as a camera-side lower bound because it does not include the
+  current single-buffer read, copy, and requeue overhead in Simplicio.
+- Keep this change local on `vs2026` until it is explicitly requested for the
+  `shavedlobster/Simplicio` fork.
+
 ## 2026-11-02 — Synchronize every Pixelfly exposure with Cicero and match legacy fitting
 
 These changes are made in the `shavedlobster/Simplicio` fork checkout on the

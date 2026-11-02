@@ -58,6 +58,8 @@ If selection fails, the adapter shows the PCO SDK error number and description. 
 
 The adapter does not reset the camera to defaults. For this milestone it uses settings already present in the camera and changes trigger/acquire state only when arming.
 
+The Pixelfly Camera Settings window displays the SDK-reported **Minimum camera cycle** in milliseconds. This value comes from `PCO_GetCOCRuntime` and updates after exposure, sensor area, or binning changes are applied. Treat it as the camera-side lower bound between triggers; it does not include the additional time used by Simplicio's current single-buffer read, copy, and requeue path.
+
 ## External acquisition
 
 The **Trigger** selector has two modes:
